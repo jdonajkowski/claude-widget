@@ -302,6 +302,10 @@
       widget.pty.write('\x1b\r');
       return false;
     }
+    if (key === 'f11' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      widget.win.toggleFullScreen();
+      return false;
+    }
     if (e.ctrlKey && e.shiftKey && key === 'r') {
       start();
       return false;
@@ -345,8 +349,13 @@
   document.getElementById('btn-settings').onclick = () => widget.openConfig();
   document.getElementById('btn-min').onclick = () => widget.win.hide();
   document.getElementById('btn-close').onclick = () => widget.win.close();
-  // Double-clicking the bar would maximize a frameless window; keep the widget size.
-  document.getElementById('bar').addEventListener('dblclick', (e) => e.preventDefault());
+  // Double-clicking the bar maximizes natively (it is an OS drag region).
+  const maxBtn = document.getElementById('btn-max');
+  maxBtn.onclick = () => widget.win.toggleMaximize();
+  widget.win.onZoom(({ maximized, fullScreen }) => {
+    maxBtn.textContent = maximized || fullScreen ? '❐' : '□';
+    maxBtn.title = fullScreen ? 'Exit full screen (F11)' : maximized ? 'Restore' : 'Maximize (F11 for full screen)';
+  });
 
   window.addEventListener('focus', () => term.focus());
   term.focus();

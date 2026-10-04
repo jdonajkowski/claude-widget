@@ -23,10 +23,12 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 | Newline in Claude's prompt | `Shift+Enter` |
 | Restart session | `Ctrl+Shift+R` |
 | Font size | `Ctrl+=` / `Ctrl+-` |
+| Maximize / restore | Title-bar □ button, or double-click the title bar |
+| Full screen | `F11` |
 | Right-click | Copy selection, or paste if nothing is selected |
 | Click a `.md` path | Open it rendered in a popout (`Esc` closes the popout) |
 
-Title-bar buttons: restart, more/less transparent, pin on top, settings, hide to tray, quit.
+Title-bar buttons: restart, more/less transparent, pin on top, settings, maximize, hide to tray, quit. Leaving maximized or full screen returns the window to its previous size, and a restart reopens it maximized if it was maximized when you quit.
 
 ## Settings
 

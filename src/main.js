@@ -101,8 +101,8 @@ function createWindow() {
     frame: false,
     show: false,
     resizable: true,
-    maximizable: false,
-    fullscreenable: false,
+    maximizable: true,
+    fullscreenable: true,
     alwaysOnTop: state.alwaysOnTop ?? config.alwaysOnTop,
     skipTaskbar: !config.showInTaskbar,
     backgroundColor: material ? '#00000000' : config.theme.background,
@@ -120,17 +120,40 @@ function createWindow() {
 
   win.setOpacity(clampOpacity(state.opacity ?? config.opacity));
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  // Maximize only after showing at the normal bounds: maximizing a hidden frameless window
+  // makes Windows restore it a few pixels off.
+  win.once('ready-to-show', () => {
+    win.show();
+    if (state.maximized) win.maximize();
+  });
 
   const saveState = () => {
     if (!win || win.isDestroyed() || win.isMinimized()) return;
-    state.bounds = win.getBounds();
+    // Keep the normal bounds while maximized or full screen, so leaving either returns to them.
+    const zoomed = win.isMaximized() || win.isFullScreen();
+    if (!zoomed) state.bounds = win.getBounds();
+    if (!win.isFullScreen()) state.maximized = win.isMaximized();
     writeJson(statePath, state);
   };
   win.on('moved', saveState);
   win.on('resized', saveState);
   win.on('close', saveState);
   win.on('closed', () => { win = null; });
+  const sendZoom = () => send('win:zoom', { maximized: win.isMaximized(), fullScreen: win.isFullScreen() });
+  win.webContents.on('did-finish-load', sendZoom);
+  // These events fire before Windows finishes the transition (and in bursts), so read the state once it settles.
+  let zoomTimer;
+  const onZoomChange = () => {
+    clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      sendZoom();
+      // Only the flag: bounds read mid-transition can be off, so they are saved on user moves/resizes only.
+      if (!win.isFullScreen()) state.maximized = win.isMaximized();
+      writeJson(statePath, state);
+    }, 150);
+  };
+  for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, onZoomChange);
 
   // Open links (Claude's login URL, docs links) in the default browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -363,6 +386,13 @@ ipcMain.handle('win:opacity', (_e, delta) => {
   return next;
 });
 ipcMain.on('win:minimize', () => win && win.minimize());
+ipcMain.on('win:toggleMaximize', () => {
+  if (!win) return;
+  if (win.isFullScreen()) win.setFullScreen(false);
+  else if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+});
+ipcMain.on('win:toggleFullScreen', () => win && win.setFullScreen(!win.isFullScreen()));
 ipcMain.on('win:hide', () => win && win.hide());
 ipcMain.on('win:close', () => app.quit());
 // OSC 9;4 states: 0 clear, 1 normal, 2 error, 3 indeterminate, 4 paused.

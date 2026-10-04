@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('widget', {
     togglePin: () => ipcRenderer.invoke('win:togglePin'),
     opacity: (delta) => ipcRenderer.invoke('win:opacity', delta),
     minimize: () => ipcRenderer.send('win:minimize'),
+    toggleMaximize: () => ipcRenderer.send('win:toggleMaximize'),
+    toggleFullScreen: () => ipcRenderer.send('win:toggleFullScreen'),
+    onZoom: on('win:zoom'),
     hide: () => ipcRenderer.send('win:hide'),
     close: () => ipcRenderer.send('win:close'),
     progress: (state, value) => ipcRenderer.send('win:progress', { state, value })
