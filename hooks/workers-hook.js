@@ -1,5 +1,5 @@
 // Claude Code hook that feeds the Claude Widget's worker rows.
-// Registered for SubagentStart, SubagentStop, Stop and PostToolUse (Bash|PowerShell).
+// Registered for SubagentStart, SubagentStop, Stop, Notification and PostToolUse (Bash|PowerShell).
 // Appends JSON lines to the file named by CLAUDE_WIDGET_WORKERS, which only the widget sets.
 // Must never block Claude or print into the session: always exits 0, writes nothing to stdout/stderr.
 const fs = require('fs');
@@ -7,6 +7,11 @@ const fs = require('fs');
 const LABEL_MAX = 40;
 // Where PostToolUse puts a background shell's task id (checked against Claude Code 2.1.289).
 const TASK_ID_PATHS = [['tool_response', 'backgroundTaskId']];
+// Notifications that mean Claude is waiting on the user (rail dot: needs you). Claude Code 2.1.289 sends
+// notification_type: permission_prompt | elicitation_dialog | idle_prompt | auth_success. idle_prompt follows
+// every turn and is covered by the Finished dot, so only these count. Without a type, the message text decides.
+const ATTENTION_TYPES = ['permission_prompt', 'elicitation_dialog'];
+const ATTENTION_MESSAGE = /permission|needs your (approval|answer)|has a question/i;
 
 const get = (obj, keys) => keys.reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), obj);
 
@@ -36,6 +41,11 @@ function eventsFor(p, ts) {
       return [...(p.agent_id ? [{ t: 'stop', id: p.agent_id, ts }] : []), snapshot(p, ts)];
     case 'Stop':
       return [snapshot(p, ts)];
+    case 'Notification': {
+      const type = p.notification_type;
+      const counted = typeof type === 'string' ? ATTENTION_TYPES.includes(type) : ATTENTION_MESSAGE.test(String(p.message || ''));
+      return counted ? [{ t: 'attention', reason: clip(type || p.message), ts }] : [];
+    }
     case 'PostToolUse': {
       if (!get(p, ['tool_input', 'run_in_background'])) return [];
       const id = TASK_ID_PATHS.map((k) => get(p, k)).find((v) => typeof v === 'string' && v);
