@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
 const { createLogTail } = require('./log-tail');
+const gitStatus = require('./git-status');
+const { summarize } = require('./footer');
 
 const isWin = process.platform === 'win32';
 
@@ -38,6 +40,8 @@ const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
 // Hook event log for the worker rows (written by hooks/workers-hook.js, see README).
 const workersLogPath = path.join(userDir, 'workers.jsonl');
+// Latest statusLine JSON for the footer (written by hooks/statusline-tee.js, see README).
+const statusPath = path.join(userDir, 'status.json');
 
 function readJson(file, fallback) {
   try {
@@ -72,6 +76,7 @@ let win = null;
 let tray = null;
 let term = null;
 const workersTail = createLogTail(workersLogPath, (events) => send('workers:events', events));
+const mdWindows = new Map();
 
 function defaultBounds() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -155,6 +160,7 @@ function toggleWindow() {
 function spawnTerminal(cols, rows) {
   killTerminal();
   workersTail.reset();
+  resetStatus();
   const cwd = fs.existsSync(config.cwd) ? config.cwd : os.homedir();
   try {
     term = pty.spawn(config.shell, config.shellArgs, {
@@ -162,7 +168,7 @@ function spawnTerminal(cols, rows) {
       cols: cols || 100,
       rows: rows || 30,
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env, CLAUDE_WIDGET_WORKERS: workersLogPath },
+      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env, CLAUDE_WIDGET_WORKERS: workersLogPath, CLAUDE_WIDGET_STATUS: statusPath },
       useConpty: isWin ? true : undefined
     });
   } catch (err) {
@@ -195,6 +201,140 @@ ipcMain.on('pty:resize', (_e, { cols, rows }) => {
   if (term && cols > 0 && rows > 0) {
     try { term.resize(cols, rows); } catch { /* pty exited */ }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Footer: statusLine JSON and git status of the session's folder
+// ---------------------------------------------------------------------------
+let statusMtime = 0;
+let sessionCwd = null; // the session's current folder, from the status JSON
+let gitBusy = false;
+let lastGit;
+
+function pollStatus() {
+  let mtime;
+  try { mtime = fs.statSync(statusPath).mtimeMs; } catch { return; }
+  if (mtime === statusMtime) return;
+  const status = readJson(statusPath, null);
+  if (!status) return; // mid-write: try again next poll
+  statusMtime = mtime;
+  send('status:update', status);
+  const cwd = (summarize(status) || {}).cwd;
+  if (cwd && cwd !== sessionCwd) {
+    sessionCwd = cwd;
+    pollGit();
+  }
+}
+
+function resetStatus() {
+  try { fs.rmSync(statusPath, { force: true }); } catch { /* stays stale until the next update */ }
+  statusMtime = 0;
+  sessionCwd = null;
+  lastGit = undefined;
+  send('status:update', null);
+  send('git:update', null);
+}
+
+function baseCwd() {
+  return sessionCwd || (fs.existsSync(config.cwd) ? config.cwd : os.homedir());
+}
+
+async function pollGit() {
+  if (gitBusy || !win || win.isDestroyed() || !win.isVisible()) return;
+  gitBusy = true;
+  const info = await gitStatus.read(baseCwd());
+  gitBusy = false;
+  const json = JSON.stringify(info);
+  if (json !== lastGit) { lastGit = json; send('git:update', info); }
+}
+
+const statusTimer = setInterval(pollStatus, 500);
+const gitTimer = setInterval(pollGit, 3000);
+
+// ---------------------------------------------------------------------------
+// Markdown popouts: .md paths clicked in the terminal open rendered in their own window
+// ---------------------------------------------------------------------------
+const MD_EXT = /\.(md|markdown)$/i;
+
+function resolveMd(p, from = baseCwd()) {
+  let file = String(p).trim();
+  if (/^file:\/\//i.test(file)) {
+    try { file = require('url').fileURLToPath(file); } catch { return null; }
+  }
+  if (file.startsWith('~')) file = path.join(os.homedir(), file.slice(1));
+  file = path.resolve(from, file);
+  if (!MD_EXT.test(file)) return null;
+  try { return fs.statSync(file).isFile() ? file : null; } catch { return null; }
+}
+
+function renderMd(file) {
+  const { marked } = require('marked');
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (err) { return { file, error: err.message }; }
+  // YAML front matter is metadata, not content.
+  text = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  return { file, dir: path.dirname(file), html: marked.parse(text, { gfm: true }) };
+}
+
+function openMd(file) {
+  const key = file.toLowerCase();
+  const existing = mdWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return;
+  }
+  const md = new BrowserWindow({
+    width: 760,
+    height: 860,
+    title: path.basename(file),
+    backgroundColor: config.theme.background,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'md', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  md.setMenu(null);
+  mdWindows.set(key, md);
+  const push = () => !md.isDestroyed() && md.webContents.send('md:render', renderMd(file));
+  md.webContents.on('did-finish-load', push);
+  // Re-render when the file changes on disk, e.g. while Claude is still editing it.
+  const onChange = (cur, prev) => { if (cur.mtimeMs !== prev.mtimeMs) push(); };
+  fs.watchFile(file, { interval: 500 }, onChange);
+  md.on('closed', () => {
+    fs.unwatchFile(file, onChange);
+    if (mdWindows.get(key) === md) mdWindows.delete(key);
+  });
+  md.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  md.webContents.on('will-navigate', (e) => e.preventDefault());
+  md.loadFile(path.join(__dirname, 'md', 'md.html'));
+}
+
+// Candidates come from md-links.js, longest first; the first one that is an existing file wins.
+ipcMain.handle('md:resolve', (_e, candidates) => {
+  if (!Array.isArray(candidates)) return null;
+  for (let i = 0; i < candidates.length && i < 16; i++) {
+    const file = resolveMd(candidates[i]);
+    if (file) return { index: i, file };
+  }
+  return null;
+});
+ipcMain.on('md:open', (_e, p) => {
+  const file = resolveMd(p);
+  if (file) openMd(file);
+});
+// Links inside a popout: web links go to the browser, other Markdown files open in their own popout.
+ipcMain.on('md:link', (_e, { href, from }) => {
+  if (/^https?:\/\//i.test(href)) return shell.openExternal(href);
+  let target;
+  try { target = decodeURIComponent(String(href).split('#')[0]); } catch { return; }
+  const file = target && resolveMd(target, path.dirname(String(from)));
+  if (file) openMd(file);
 });
 
 // ---------------------------------------------------------------------------
@@ -277,9 +417,13 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
     killTerminal();
     workersTail.close();
+    clearInterval(statusTimer);
+    clearInterval(gitTimer);
   });
 
   // The tray keeps the app alive when the window is hidden; closing the
   // widget with the X button quits explicitly via win:close.
   app.on('window-all-closed', () => app.quit());
+  // Quitting from the widget also closes any open Markdown popouts.
+  app.on('before-quit', () => { for (const md of mdWindows.values()) if (!md.isDestroyed()) md.destroy(); });
 }

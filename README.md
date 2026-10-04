@@ -9,6 +9,8 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 - Pin on top, adjustable opacity, and optional Windows 11 acrylic/mica backdrop
 - Terminal progress bar: Claude Code's OSC 9;4 progress is drawn under the title bar and on the taskbar icon
 - Worker rows: a busy/done row per running subagent and background shell (needs the hooks below)
+- Status footer: model, cost, context use, 5-hour/7-day limits, git branch and changes, and a turn timer
+- Markdown popouts: click a `.md` path in the terminal to open it rendered in its own window (live-reloads on save)
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
 
 ## Keyboard and mouse
@@ -22,6 +24,7 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 | Restart session | `Ctrl+Shift+R` |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Right-click | Copy selection, or paste if nothing is selected |
+| Click a `.md` path | Open it rendered in a popout (`Esc` closes the popout) |
 
 Title-bar buttons: restart, more/less transparent, pin on top, settings, hide to tray, quit.
 
@@ -56,7 +59,7 @@ Do not set `WT_SESSION`; it disables the bar.
 
 ### Worker rows
 
-The widget shows a row for each running subagent and background shell, in a side panel to the right of the terminal. The panel opens when the first worker starts and closes once every row has faded. Claude Code reports these through hooks, so add this to `~/.claude/settings.json`. Merge it into any existing `hooks`, and keep your other `Stop` hooks by adding this one to the same `hooks` array.
+The widget shows a row for each running subagent and background shell, in a side panel to the right of the terminal. Rows stack from the top of the panel, above the status footer. The panel shows whenever there are rows or footer data. Claude Code reports these through hooks, so add this to `~/.claude/settings.json`. Merge it into any existing `hooks`, and keep your other `Stop` hooks by adding this one to the same `hooks` array.
 
 ```json
 "hooks": {
@@ -68,6 +71,31 @@ The widget shows a row for each running subagent and background shell, in a side
 ```
 
 Replace `<you>` with your Windows user name. The hook only acts inside the widget: it checks `CLAUDE_WIDGET_WORKERS`, which the widget sets for its session, so other Claude sessions are unaffected. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds. Events are logged to `%APPDATA%\Claude Widget\workers.jsonl`, which is cleared on each session restart.
+
+### Status footer
+
+The bottom of the side panel shows:
+
+- **Model, effort and session cost.**
+- **Context:** a bar and the percentage of the context window in use. It turns yellow at 60% and red at 85%.
+- **Rate limits:** 5-hour and 7-day usage, and when the 5-hour window resets.
+- **Git:** the branch, the number of changed files (●), and commits ahead (↑) or behind (↓) its upstream. Checked every 3 seconds in the session's current folder.
+- **Turn timer:** how long Claude has been working on this turn (▶), or how long the last turn took. It follows the progress bar, so it needs the progress setup above.
+
+Model, cost, context and limits come from Claude Code's status line JSON. Wrap your status line command with `hooks/statusline-tee.js` in `~/.claude/settings.json`. The wrapper saves the JSON for the widget, then runs your command and passes its output through, so your status line looks the same:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/statusline-tee.js\" npx -y ccstatusline@latest"
+}
+```
+
+Everything after the script path is your own status line command. With nothing after it, the wrapper prints nothing. Like the worker hook, it only saves inside the widget (`CLAUDE_WIDGET_STATUS`). The JSON goes to `%APPDATA%\Claude Widget\status.json`, which is cleared on each session restart.
+
+### Markdown popouts
+
+A Markdown path in the terminal output (`.md` or `.markdown`, absolute or relative to the session's folder, spaces allowed) is underlined on hover if the file exists. Clicking it opens the file rendered in its own window. The popout re-renders when the file changes, links to other Markdown files open in their own popouts, and web links open in your browser. Clicking a file that is already open focuses its popout.
 
 ## Running from source
 
@@ -98,7 +126,12 @@ src/preload.js         Bridge exposed to the renderer as window.widget
 src/renderer/          Terminal UI (xterm.js), title bar, worker rows, styles
 src/workers.js         Reducer: hook events -> worker rows (renderer + tests)
 src/log-tail.js        Tails the hook event log for the main process
+src/footer.js          Status footer formatting (renderer + tests)
+src/git-status.js      Git branch and changes for the footer
+src/md-links.js        Finds Markdown paths in terminal text (renderer + tests)
+src/md/                Markdown popout window
 hooks/workers-hook.js  Claude Code hook that writes the event log
+hooks/statusline-tee.js  statusLine wrapper that saves the status JSON for the footer
 test/                  Unit tests (npm test)
 assets/                App and tray icons
 backup/original-src/   Source before the progress-bar patch

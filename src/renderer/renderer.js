@@ -1,4 +1,4 @@
-/* global Terminal, FitAddon, WebLinksAddon, WidgetWorkers */
+/* global Terminal, FitAddon, WebLinksAddon, WidgetWorkers, WidgetFooter, WidgetMdLinks */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -13,7 +13,15 @@
     allowProposedApi: true,
     allowTransparency: cfg.transparent,
     scrollback: 10000,
-    theme: cfg.transparent ? { ...cfg.theme, background: '#00000000' } : cfg.theme
+    theme: cfg.transparent ? { ...cfg.theme, background: '#00000000' } : cfg.theme,
+    // OSC 8 hyperlinks: Markdown files open in a popout, web links in the browser.
+    linkHandler: {
+      allowNonHttpProtocols: true,
+      activate: (_e, uri) => {
+        if (/^file:/i.test(uri) && /\.(md|markdown)$/i.test(uri.split(/[?#]/)[0])) widget.md.open(uri);
+        else if (/^https?:\/\//i.test(uri)) widget.openExternal(uri);
+      }
+    }
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
@@ -45,6 +53,7 @@
       progressEl.style.width = '0';
     }
     widget.win.progress(state, value);
+    trackTurn(state);
   };
   term.parser.registerOscHandler(9, (data) => {
     const m = /^4;(\d)(?:;(\d{1,3}))?/.exec(data);
@@ -53,8 +62,86 @@
     return true;
   });
 
-  // --- Worker rows (subagents + background shells, fed by hooks/workers-hook.js) ---
+  // --- Side panel: worker rows on top, status footer at the bottom ------------
+  const sideEl = document.getElementById('side');
   const workersEl = document.getElementById('workers');
+  const footerEl = document.getElementById('footer');
+  let workerCount = 0;
+  const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden; };
+
+  // --- Footer: model, cost, context, rate limits (statusLine), git, turn timer ---
+  const $ = (id) => document.getElementById(id);
+  let status = null;
+  let git = null;
+  let turnStart = null;
+  let lastTurnMs = null;
+  let turnTimer = null;
+
+  const setLevel = (el, pct) => {
+    el.classList.remove('warm', 'hot');
+    const lv = WidgetFooter.level(pct);
+    if (lv) el.classList.add(lv);
+  };
+
+  const renderFooter = () => {
+    const now = Date.now();
+    const s = status;
+    $('f-model').textContent = s && s.model ? (s.effort ? `${s.model} · ${s.effort}` : s.model) : '';
+    $('f-cost').textContent = s && s.cost !== null ? `$${s.cost.toFixed(2)}` : '';
+    $('f-ctx-row').hidden = !s || s.ctxPct === null;
+    if (s && s.ctxPct !== null) {
+      $('f-meter').style.width = `${s.ctxPct}%`;
+      setLevel($('f-meter'), s.ctxPct);
+      setLevel($('f-ctx'), s.ctxPct);
+      const size = s.ctxSize ? `/${WidgetFooter.fmtTokens(s.ctxSize)}` : '';
+      $('f-ctx').textContent = `${s.ctxPct}% ${WidgetFooter.fmtTokens(s.ctxTokens)}${size}`;
+    }
+    $('f-limits').hidden = !s || (s.fiveHour === null && s.sevenDay === null);
+    if (s) {
+      const resets = WidgetFooter.fmtResets(s.fiveHourResets, now);
+      $('f-5h').textContent = s.fiveHour === null ? '' : `5h ${s.fiveHour}%${resets ? ` · resets ${resets}` : ''}`;
+      $('f-7d').textContent = s.sevenDay === null ? '' : `7d ${s.sevenDay}%`;
+      setLevel($('f-5h'), s.fiveHour);
+      setLevel($('f-7d'), s.sevenDay);
+    }
+    $('f-git').textContent = WidgetFooter.fmtGit(git) || '';
+    $('f-git').title = (s && s.cwd) || '';
+    const turn = $('f-turn');
+    turn.classList.toggle('busy', turnStart !== null);
+    turn.textContent = turnStart !== null ? `▶ ${WidgetFooter.fmtDuration(now - turnStart)}`
+      : lastTurnMs !== null ? `last ${WidgetFooter.fmtDuration(lastTurnMs)}` : '';
+    footerEl.hidden = !s && !git && turnStart === null && lastTurnMs === null;
+    updateSide();
+  };
+
+  // Claude Code sets OSC 9;4 progress when a turn starts and clears it when the turn ends.
+  function trackTurn(state) {
+    if (state >= 1 && state <= 4 && turnStart === null) {
+      turnStart = Date.now();
+      if (!turnTimer) turnTimer = setInterval(renderFooter, 1000);
+    } else if (state === 0 && turnStart !== null) {
+      lastTurnMs = Date.now() - turnStart;
+      turnStart = null;
+      clearInterval(turnTimer);
+      turnTimer = null;
+    }
+    renderFooter();
+  }
+
+  widget.status.onUpdate((raw) => { status = WidgetFooter.summarize(raw); renderFooter(); });
+  widget.status.onGit((info) => { git = info; renderFooter(); });
+
+  const resetFooter = () => {
+    status = null;
+    git = null;
+    turnStart = null;
+    lastTurnMs = null;
+    clearInterval(turnTimer);
+    turnTimer = null;
+    renderFooter();
+  };
+
+  // --- Worker rows (subagents + background shells, fed by hooks/workers-hook.js) ---
   const MAX_ROWS = 20;
   let workerEvents = [];
   let workerTimer = null;
@@ -98,7 +185,8 @@
     } else if (more) {
       more.remove();
     }
-    workersEl.hidden = workers.length === 0;
+    workerCount = workers.length;
+    updateSide();
     if (workers.length === 0 && workerTimer) { clearInterval(workerTimer); workerTimer = null; }
   };
 
@@ -116,8 +204,9 @@
   // --- PTY wiring ----------------------------------------------------------
   const start = () => {
     document.body.classList.remove('exited');
-    setProgress(0, 0);
     clearWorkers();
+    resetFooter();
+    setProgress(0, 0);
     term.reset();
     fit.fit();
     widget.pty.start(term.cols, term.rows);
@@ -138,6 +227,38 @@
     widget.pty.write(data);
   });
   term.onResize(({ cols, rows }) => widget.pty.resize(cols, rows));
+
+  // --- Markdown paths in the output open rendered in a popout (click) -------
+  // Wrapped rows are joined so a long path that spans rows is still one link.
+  term.registerLinkProvider({
+    provideLinks(y, callback) {
+      const buf = term.buffer.active;
+      let first = y - 1;
+      while (first > 0 && buf.getLine(first) && buf.getLine(first).isWrapped) first--;
+      let last = y - 1;
+      while (buf.getLine(last + 1) && buf.getLine(last + 1).isWrapped) last++;
+      let text = '';
+      for (let r = first; r <= last; r++) {
+        const line = buf.getLine(r);
+        if (line) text += line.translateToString(r === last);
+      }
+      const matches = WidgetMdLinks.find(text);
+      if (!matches.length) return callback(undefined);
+      const cols = term.cols;
+      const pos = (i) => ({ x: (i % cols) + 1, y: first + Math.floor(i / cols) + 1 });
+      Promise.all(matches.map((m) => widget.md.resolve(m.candidates.map((c) => c.path))
+        .then((hit) => hit && { c: m.candidates[hit.index], file: hit.file })))
+        .then((hits) => {
+          const links = hits.filter(Boolean).map(({ c, file }) => ({
+            range: { start: pos(c.start), end: pos(c.end - 1) },
+            text: c.path,
+            decorations: { underline: true, pointerCursor: true },
+            activate: () => widget.md.open(file)
+          })).filter((l) => l.range.start.y <= y && l.range.end.y >= y);
+          callback(links.length ? links : undefined);
+        }, () => callback(undefined));
+    }
+  });
 
   // Debounced so a burst of size changes (window drag, worker panel opening) resizes the PTY once.
   let fitTimer;

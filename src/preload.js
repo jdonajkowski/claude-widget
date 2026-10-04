@@ -31,6 +31,14 @@ contextBridge.exposeInMainWorld('widget', {
   workers: {
     onEvents: on('workers:events')
   },
+  status: {
+    onUpdate: on('status:update'),
+    onGit: on('git:update')
+  },
+  md: {
+    resolve: (candidates) => ipcRenderer.invoke('md:resolve', candidates),
+    open: (file) => ipcRenderer.send('md:open', file)
+  },
   openConfig: () => ipcRenderer.send('app:openConfig'),
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url)
 });

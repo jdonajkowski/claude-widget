@@ -25,7 +25,15 @@
     </header>
     <div id="body">
       <main id="terminal"></main>
-      <aside id="workers" hidden></aside>
+      <aside id="side" hidden>
+        <div id="workers"></div>
+        <div id="footer" hidden>
+          <div class="f-row"><span id="f-model"></span><span id="f-cost" class="right"></span></div>
+          <div class="f-row" id="f-ctx-row"><span>ctx</span><span class="meter"><i id="f-meter"></i></span><span id="f-ctx" class="right"></span></div>
+          <div class="f-row" id="f-limits"><span id="f-5h"></span><span id="f-7d" class="right"></span></div>
+          <div class="f-row"><span id="f-git"></span><span id="f-turn" class="right"></span></div>
+        </div>
+      </aside>
     </div>
     <div id="toast"></div>
   </div>
@@ -33,6 +41,8 @@
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
   <script src="../workers.js"></script>
+  <script src="../footer.js"></script>
+  <script src="../md-links.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

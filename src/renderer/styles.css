@@ -66,19 +66,42 @@ body.transparent #frame { background: transparent; }
   display: flex;
 }
 
-/* Worker rows (subagents and background shells), in a side panel right of the terminal. */
-#workers {
+/* Side panel right of the terminal: worker rows (subagents, background shells) above the status footer. */
+#side {
   flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  padding: 6px 10px;
-  overflow: hidden;
+  min-height: 0;
   background: var(--bar);
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   font: 11px/18px 'Cascadia Mono', Consolas, monospace;
   color: var(--muted);
   animation: workers-in 0.15s ease-out;
 }
-#workers[hidden] { display: none; }
+#side[hidden] { display: none; }
+#workers { flex: 1; min-height: 0; padding: 6px 10px; overflow: hidden; }
+
+#footer { flex: 0 0 auto; padding: 5px 10px 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+#footer[hidden], .f-row[hidden] { display: none; }
+.f-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.f-row > span { overflow: hidden; text-overflow: ellipsis; }
+.f-row .right { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#f-model { color: #e8e6e3; }
+.f-row .meter {
+  flex: 1;
+  height: 4px;
+  min-width: 40px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+#f-meter { display: block; height: 100%; width: 0; background: #57ab5a; transition: width 0.3s ease; }
+#f-meter.warm { background: #d4a72c; }
+#f-meter.hot { background: #e5534b; }
+#footer .warm:not(#f-meter) { color: #d4a72c; }
+#footer .hot:not(#f-meter) { color: #e5534b; }
+#f-turn.busy { color: var(--accent); }
 @keyframes workers-in { from { opacity: 0; transform: translateX(12px); } }
 .worker { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .worker .label { overflow: hidden; text-overflow: ellipsis; color: #e8e6e3; }
