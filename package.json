@@ -1,7 +1,7 @@
 {
   "name": "claude-desktop-widget",
   "productName": "Claude Widget",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Borderless desktop widget that hosts a Claude Code terminal session.",
   "author": "Jacob Donajkowski",
   "main": "src/main.js",
