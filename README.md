@@ -8,6 +8,7 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 - Global hotkey to show/hide (default `Ctrl+Alt+Space`) and a tray icon with a menu
 - Pin on top, adjustable opacity, and optional Windows 11 acrylic/mica backdrop
 - Terminal progress bar: Claude Code's OSC 9;4 progress is drawn under the title bar and on the taskbar icon
+- Worker rows: a busy/done row per running subagent and background shell (needs the hooks below)
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
 
 ## Keyboard and mouse
@@ -53,6 +54,21 @@ Claude Code only emits OSC 9;4 progress for terminals it recognises, and it expl
 
 Do not set `WT_SESSION`; it disables the bar.
 
+### Worker rows
+
+The widget shows a row for each running subagent and background shell, between the title bar and the terminal. Claude Code reports these through hooks, so add this to `~/.claude/settings.json`. Merge it into any existing `hooks`, and keep your other `Stop` hooks by adding this one to the same `hooks` array.
+
+```json
+"hooks": {
+  "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
+  "SubagentStop":  [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
+  "Stop":          [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
+  "PostToolUse":   [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }]
+}
+```
+
+Replace `<you>` with your Windows user name. The hook only acts inside the widget: it checks `CLAUDE_WIDGET_WORKERS`, which the widget sets for its session, so other Claude sessions are unaffected. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds. Events are logged to `%APPDATA%\Claude Widget\workers.jsonl`, which is cleared on each session restart.
+
 ## Running from source
 
 Requires Node.js (tested with 24 / npm 11) and Claude Code (`claude` on your `PATH`).
@@ -60,11 +76,12 @@ Requires Node.js (tested with 24 / npm 11) and Claude Code (`claude` on your `PA
 ```sh
 npm install      # Electron itself downloads on first run
 npm start        # run the widget from source
+npm test         # unit tests
 npm run pack     # unpacked build in dist/win-unpacked
 npm run dist     # installer: dist/Claude Widget Setup <version>.exe
 ```
 
-The installer is a one-click, per-user NSIS setup that installs to `%LOCALAPPDATA%\Programs\Claude Widget` and replaces an existing install. Your settings in `%APPDATA%\Claude Widget` are kept.
+The installer is a one-click, per-user NSIS setup that installs to `%LOCALAPPDATA%\Programs\claude-desktop-widget` and replaces an existing install. Your settings in `%APPDATA%\Claude Widget` are kept.
 
 Notes:
 
@@ -78,7 +95,11 @@ Notes:
 ```
 src/main.js            Electron main process: window, tray, hotkey, PTY, settings
 src/preload.js         Bridge exposed to the renderer as window.widget
-src/renderer/          Terminal UI (xterm.js), title bar, styles
+src/renderer/          Terminal UI (xterm.js), title bar, worker rows, styles
+src/workers.js         Reducer: hook events -> worker rows (renderer + tests)
+src/log-tail.js        Tails the hook event log for the main process
+hooks/workers-hook.js  Claude Code hook that writes the event log
+test/                  Unit tests (npm test)
 assets/                App and tray icons
 backup/original-src/   Source before the progress-bar patch
 backup/config.json     Snapshot of a working user config
