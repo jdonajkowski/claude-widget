@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Browser</title>
+  <link rel="stylesheet" href="browser.css">
+</head>
+<body>
+  <header id="bar">
+    <button id="btn-back" title="Back (Alt+Left)" disabled>←</button>
+    <button id="btn-fwd" title="Forward (Alt+Right)" disabled>→</button>
+    <button id="btn-reload" title="Reload (F5, Ctrl+Shift+R ignores cache)">↻</button>
+    <form id="nav"><input id="url" spellcheck="false" placeholder="URL, localhost:3000 or a file path" autocomplete="off"></form>
+    <select id="device" title="Viewport size">
+      <option value="full">Full width</option>
+      <option value="desktop">Desktop 1440</option>
+      <option value="laptop">Laptop 1280</option>
+      <option value="tablet">Tablet 768</option>
+      <option value="mobile">Mobile 390</option>
+    </select>
+    <button id="btn-shot" title="Save a screenshot (PNG)">Screenshot</button>
+    <button id="btn-devtools" title="Developer tools (F12)">DevTools</button>
+    <button id="btn-external" title="Open in your default browser">↗</button>
+  </header>
+  <div id="loading"></div>
+  <div id="status"></div>
+  <script src="browser.js"></script>
+</body>
+</html>

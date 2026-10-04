@@ -327,7 +327,7 @@ body.rail-collapsed .proj .pdot { position: absolute; top: 2px; right: 1px; widt
 }
 
 /* Files pane button: a folder outline in the accent color. */
-#btn-files {
+#btn-files, #btn-browser {
   width: 22px;
   height: 20px;
   margin: 0 0 0 -4px;
@@ -341,8 +341,9 @@ body.rail-collapsed .proj .pdot { position: absolute; top: 2px; right: 1px; widt
   justify-content: center;
   -webkit-app-region: no-drag;
 }
-#btn-files svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-linejoin: round; }
-#btn-files:hover, #btn-files.on { background: rgba(217, 119, 87, 0.16); }
+#btn-files svg, #btn-browser svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-linejoin: round; }
+#btn-browser { margin-left: -6px; }
+#btn-files:hover, #btn-files.on, #btn-browser:hover { background: rgba(217, 119, 87, 0.16); }
 
 /* Files pane, between the project rail and the terminal. Unlike the rail it takes its width from the terminal. */
 #files {

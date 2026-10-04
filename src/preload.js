@@ -9,6 +9,7 @@ const on = (channel) => (cb) => {
 // Every PTY, worker and status message carries the session (project) id.
 contextBridge.exposeInMainWorld('widget', {
   getConfig: () => ipcRenderer.invoke('config:get'),
+  onConfigChanged: on('config:changed'),
   pty: {
     write: (id, data) => ipcRenderer.send('pty:input', { id, data }),
     resize: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
@@ -65,6 +66,9 @@ contextBridge.exposeInMainWorld('widget', {
     list: (id, rel) => ipcRenderer.invoke('files:list', { id, rel }),
     open: (id, rel) => ipcRenderer.send('files:open', { id, rel }),
     menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir })
+  },
+  browser: {
+    open: () => ipcRenderer.send('browser:open')
   },
   onToast: on('toast'),
   openConfig: () => ipcRenderer.send('app:openConfig'),

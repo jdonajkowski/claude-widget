@@ -47,6 +47,9 @@
     }
   }).observe(docEl, { childList: true });
 
+  document.getElementById('btn-edit').onclick = () => window.mdView.edit();
+  document.getElementById('btn-vscode').onclick = () => window.mdView.openInVSCode();
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') window.close();
   });

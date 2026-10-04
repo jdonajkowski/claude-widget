@@ -89,6 +89,7 @@
   // --- Files pane ---------------------------------------------------------
   const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
   $('btn-files').onclick = () => { filesPane.toggle(); terminals.focus(); };
+  $('btn-browser').onclick = () => widget.browser.open();
 
   function renderRail() {
     rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state) });
@@ -390,6 +391,7 @@
     toast(on ? 'Pinned on top' : 'Unpinned');
   };
   $('btn-settings').onclick = () => widget.openConfig();
+  widget.onConfigChanged(({ alwaysOnTop }) => pinBtn.classList.toggle('on', alwaysOnTop));
   $('btn-min').onclick = () => widget.win.hide();
   $('btn-close').onclick = () => widget.win.close();
   // Double-clicking the bar maximizes natively (it is an OS drag region).

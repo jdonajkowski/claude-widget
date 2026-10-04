@@ -42,12 +42,22 @@ test('encodeHistoryDir replaces every non-alphanumeric char', () => {
 test('hasHistory needs a *.jsonl in the encoded dir', () => {
   const home = tmp();
   const dir = path.join(home, '.claude', 'projects', 'C--p-foo');
-  assert.equal(hasHistory('C:\\p\\foo', home), false);
+  const claudeDir = path.join(home, '.claude');
+  assert.equal(hasHistory('C:\\p\\foo', claudeDir), false);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'memory.md'), '');
-  assert.equal(hasHistory('C:\\p\\foo', home), false);
+  assert.equal(hasHistory('C:\\p\\foo', claudeDir), false);
   fs.writeFileSync(path.join(dir, 'abc.jsonl'), '');
-  assert.equal(hasHistory('C:\\p\\foo', home), true);
+  assert.equal(hasHistory('C:\\p\\foo', claudeDir), true);
+});
+
+test('buildLaunch: adds --settings for Claude Code only, quoted for the shell', () => {
+  const file = "C:\\Users\\o'neil\\Claude Widget\\claude-settings.json";
+  assert.equal(buildLaunch({ shell: 'powershell.exe' }, { cont: true, isWin: true, settingsFile: file }).args[3],
+    "claude --settings 'C:\\Users\\o''neil\\Claude Widget\\claude-settings.json' --continue");
+  assert.equal(buildLaunch({ shell: 'bash' }, { cont: false, isWin: false, settingsFile: "/h/o'n/s.json" }).args[1],
+    "claude --settings '/h/o'\\''n/s.json'; exec $SHELL");
+  assert.equal(buildLaunch({ shell: 'pwsh', claudeCommand: "Write-Output 'x'" }, { cont: false, isWin: true, settingsFile: file }).args[3], "Write-Output 'x'");
 });
 
 test('buildLaunch: claudeCommand wins, else last shellArgs element, else claude', () => {

@@ -8,6 +8,11 @@ const projects = require('./projects');
 const gitStatus = require('./git-status');
 const { summarize } = require('./footer');
 const files = require('./files');
+const settingsLib = require('./settings');
+const launch = require('./claude-launch');
+const setupChecks = require('./setup-checks');
+const { createBrowser } = require('./browser-window');
+const { isLocalUrl } = require('./browser-url');
 
 const isWin = process.platform === 'win32';
 
@@ -23,8 +28,14 @@ const DEFAULT_CONFIG = {
   claudeCommand: '',
   // The rail lists every subfolder of projectsRoot plus pinned extras (projects.json).
   projectsRoot: path.join(os.homedir(), 'Projects'),
+  // Claude Code's config folder for widget sessions (CLAUDE_CONFIG_DIR): sign-in, plugins, history, settings.
+  // Empty: Claude's default ~/.claude, shared with other Claude Code installs.
+  claudeConfigDir: '~/Projects/.claude',
   cwd: os.homedir(),
   env: {},
+  // Pass the widget's hooks and status line wrapper to each Claude session (--settings), so
+  // ~/.claude/settings.json needs nothing added. Off: wire them up there yourself (see README).
+  claudeHooks: true,
   alwaysOnTop: true,
   opacity: 0.95,
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
@@ -41,6 +52,14 @@ const DEFAULT_CONFIG = {
   }
 };
 
+// All widget data lives in ~/Projects/.claude/widget (src/data-dirs.js), copied once from the old
+// %APPDATA%\Claude Widget. An explicit --user-data-dir still wins (handy for testing).
+const dataDirs = require('./data-dirs');
+const dirs = dataDirs.layout(os.homedir());
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  try { dataDirs.migrateWidgetData(app.getPath('userData'), dirs.widget); } catch (err) { console.error('Moving widget data failed', err); }
+  app.setPath('userData', dirs.widget);
+}
 const userDir = app.getPath('userData');
 const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
@@ -81,6 +100,41 @@ let tray = null;
 const mdWindows = new Map();
 let activeId = null;
 
+// What sessions pass to Claude Code with --settings (src/claude-launch.js). Rewritten before each
+// session starts, so it follows the user's current status line and whether Node is installed.
+const hooksDir = path.join(__dirname, '..', 'hooks');
+const claudeSettingsPath = path.join(userDir, 'claude-settings.json');
+// Claude Code's config folder for widget sessions: config.claudeConfigDir, else ~/.claude.
+const claudeDir = () => dataDirs.expandHome(config.claudeConfigDir, os.homedir()) || path.join(os.homedir(), '.claude');
+const claudeEnv = () => (config.claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeDir() } : {});
+const globalClaudeSettings = () => readJson(path.join(claudeDir(), 'settings.json'), {});
+
+// First run with a separate config folder: copy ~/.claude into it (not the sign-in token, see data-dirs.js).
+let pendingToast = null;
+if (config.claudeConfigDir) {
+  try {
+    const moved = dataDirs.migrateClaudeConfig({ home: os.homedir(), to: claudeDir(), isWin });
+    if (moved) pendingToast = `Copied your Claude settings, plugins and history to ${claudeDir()}. Sign in once in a widget session.`;
+  } catch (err) {
+    console.error('Copying ~/.claude failed', err);
+  }
+}
+
+function launchInfo() {
+  const env = { ...process.env, ...config.env };
+  const node = launch.findOnPath(isWin ? ['node.exe'] : ['node'], { env, isWin });
+  const gitBash = isWin ? launch.findGitBash({ env }) : null;
+  return { env, node, gitBash, ...launch.sessionSettings({ hooksDir, execPath: process.execPath, node, isWin, gitBash, global: globalClaudeSettings() }) };
+}
+
+function writeSessionSettings() {
+  if (config.claudeHooks === false) return null;
+  const { settings } = launchInfo();
+  if (!settings) return null;
+  writeJson(claudeSettingsPath, settings);
+  return claudeSettingsPath;
+}
+
 // One live session per opened project. Each one's worker log (hooks/workers-hook.js) and statusLine
 // JSON (hooks/statusline-tee.js) live in sessions/<hash>/, and its PTY env points the hooks there (see README).
 const sessions = createSessions({
@@ -90,6 +144,9 @@ const sessions = createSessions({
   home: os.homedir(),
   isWin,
   send,
+  settingsFile: writeSessionSettings,
+  claudeDir,
+  extraEnv: claudeEnv,
   onStatus: (id) => { if (id === activeId) pollGit(); }
 });
 
@@ -201,6 +258,7 @@ function createWindow() {
   win.on('focus', scanProjects);
   const sendZoom = () => send('win:zoom', { maximized: win.isMaximized(), fullScreen: win.isFullScreen() });
   win.webContents.on('did-finish-load', sendZoom);
+  win.webContents.on('did-finish-load', () => { if (pendingToast) { send('toast', pendingToast); pendingToast = null; } });
   for (const ev of ['maximize', 'enter-full-screen']) win.on(ev, () => { if (zoomRail === null) zoomRail = railWidth(); });
   // These events fire before Windows finishes the transition (and in bursts), so read the state once it settles.
   let zoomTimer;
@@ -483,6 +541,7 @@ function openMd(file) {
     }
   });
   md.setMenu(null);
+  md.mdFile = file;
   mdWindows.set(key, md);
   const push = () => !md.isDestroyed() && md.webContents.send('md:render', renderMd(file));
   md.webContents.on('did-finish-load', push);
@@ -543,6 +602,128 @@ ipcMain.on('md:link', (_e, { href, from }) => {
 });
 
 // ---------------------------------------------------------------------------
+// Editor windows: text files open in Monaco (src/editor), one window per file
+// ---------------------------------------------------------------------------
+const editors = new Map(); // lower-cased path -> { win, file, line, bom, disk, dirty, forceClose }
+
+function readForEdit(file) {
+  const buf = fs.readFileSync(file);
+  const bom = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+  return { text: buf.toString('utf8', bom ? 3 : 0), bom };
+}
+
+const editorFor = (sender) => {
+  const w = BrowserWindow.fromWebContents(sender);
+  for (const e of editors.values()) if (e.win === w) return e;
+  return null;
+};
+
+function openInVSCode(file, line) {
+  shell.openExternal(files.vscodeUrl(file, line)).catch(() => send('toast', 'VS Code did not open. Is it installed?'));
+}
+
+function openEditor(file, line) {
+  const key = file.toLowerCase();
+  const existing = editors.get(key);
+  if (existing && !existing.win.isDestroyed()) {
+    if (existing.win.isMinimized()) existing.win.restore();
+    existing.win.show();
+    existing.win.focus();
+    return;
+  }
+  const ed = new BrowserWindow({
+    width: 900,
+    height: 820,
+    title: path.basename(file),
+    backgroundColor: config.theme.background,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'editor', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  ed.setMenu(null);
+  const e = { win: ed, file, line, bom: false, disk: null, dirty: false, forceClose: false };
+  editors.set(key, e);
+
+  // Changes on disk (Claude editing the file) go to the page, which reloads or offers to.
+  const onChange = (cur, prev) => {
+    if (cur.mtimeMs === prev.mtimeMs || ed.isDestroyed()) return;
+    let read;
+    try { read = readForEdit(file); } catch { return; }
+    if (read.text === e.disk) return; // our own save
+    e.disk = read.text;
+    e.bom = read.bom;
+    ed.webContents.send('editor:changed', read.text);
+  };
+  fs.watchFile(file, { interval: 500 }, onChange);
+
+  ed.on('close', (ev) => {
+    if (!e.dirty || e.forceClose) return;
+    ev.preventDefault();
+    const choice = dialog.showMessageBoxSync(ed, {
+      type: 'warning',
+      buttons: ['Save', "Don't save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: `Save changes to ${path.basename(file)}?`
+    });
+    if (choice === 0) ed.webContents.send('editor:saveAndClose');
+    else if (choice === 1) { e.forceClose = true; ed.close(); }
+  });
+  ed.on('closed', () => {
+    fs.unwatchFile(file, onChange);
+    if (editors.get(key) === e) editors.delete(key);
+  });
+  ed.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  ed.webContents.on('will-navigate', (ev) => ev.preventDefault());
+  ed.loadFile(path.join(__dirname, 'editor', 'editor.html'));
+}
+
+ipcMain.handle('editor:get', (ev) => {
+  const e = editorFor(ev.sender);
+  if (!e) return null;
+  try {
+    const { text, bom } = readForEdit(e.file);
+    e.disk = text;
+    e.bom = bom;
+    return { file: e.file, name: path.basename(e.file), text, line: e.line, fontFamily: config.fontFamily, fontSize: config.fontSize };
+  } catch (err) {
+    return { file: e.file, name: path.basename(e.file), error: err.message };
+  }
+});
+
+// Keeps a UTF-8 BOM if the file had one; line endings are whatever the text already uses.
+ipcMain.handle('editor:save', (ev, text) => {
+  const e = editorFor(ev.sender);
+  if (!e || typeof text !== 'string') return { error: 'No file' };
+  try {
+    e.disk = text;
+    fs.writeFileSync(e.file, (e.bom ? '﻿' : '') + text, 'utf8');
+    e.dirty = false;
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+ipcMain.on('editor:dirty', (ev, dirty) => { const e = editorFor(ev.sender); if (e) e.dirty = !!dirty; });
+ipcMain.on('editor:vscode', (ev, line) => { const e = editorFor(ev.sender); if (e) openInVSCode(e.file, Number(line) || undefined); });
+ipcMain.on('editor:close', (ev) => { const e = editorFor(ev.sender); if (e) { e.forceClose = true; e.win.close(); } });
+
+// The Markdown viewer's Edit and VS Code buttons act on the file that viewer shows.
+const mdFileOf = (sender) => { const w = BrowserWindow.fromWebContents(sender); return w && w.mdFile; };
+ipcMain.on('md:edit', (ev) => { const f = mdFileOf(ev.sender); if (f) openEditor(f); });
+ipcMain.on('md:vscode', (ev) => { const f = mdFileOf(ev.sender); if (f) openInVSCode(f); });
+
+// Built-in browser (src/browser-window.js): mockups, local dev servers, screenshots.
+const browser = createBrowser({ icon: path.join(__dirname, '..', 'assets', 'icon.png'), projectDir: () => projectPath(activeId), isWin });
+browser.handle(ipcMain);
+ipcMain.on('browser:open', () => browser.open());
+
+// ---------------------------------------------------------------------------
 // Files pane: browse the active project's folder
 // ---------------------------------------------------------------------------
 function projectPath(id) {
@@ -567,12 +748,15 @@ function fileTarget(id, rel) {
   return root ? files.safeJoin(root, rel) : null;
 }
 
-// Click: Markdown opens in the viewer, runnable files are shown in Explorer, the rest open in their default app.
+// Click: Markdown opens in the viewer, other text files in the editor, runnable binaries are shown in
+// Explorer, the rest open in their default app.
 ipcMain.on('files:open', (_e, { id, rel }) => {
   const file = fileTarget(id, rel);
   if (!file || !fs.existsSync(file)) return;
-  const action = files.openAction(file);
+  const action = files.openAction(file, files.isTextFile);
   if (action === 'md') openMd(file);
+  else if (action === 'browse') browser.open(file);
+  else if (action === 'edit') openEditor(file);
   else if (action === 'reveal') shell.showItemInFolder(file);
   else shell.openPath(file);
 });
@@ -581,8 +765,12 @@ ipcMain.on('files:menu', (_e, { id, rel, dir }) => {
   const file = fileTarget(id, rel);
   if (!file || !win) return;
   const items = [];
-  if (!dir && files.openAction(file) === 'md') items.push({ label: 'Open in viewer', click: () => openMd(file) });
-  if (!dir && files.openAction(file) === 'open') items.push({ label: 'Open', click: () => shell.openPath(file) });
+  const action = dir ? null : files.openAction(file, files.isTextFile);
+  if (action === 'md') items.push({ label: 'Open in viewer', click: () => openMd(file) });
+  if (action === 'browse') items.push({ label: 'Open in browser', click: () => browser.open(file) });
+  if (action === 'md' || action === 'edit' || (action === 'browse' && files.isTextFile(file))) items.push({ label: 'Edit', click: () => openEditor(file) });
+  if (action === 'open') items.push({ label: 'Open', click: () => shell.openPath(file) });
+  items.push({ label: 'Open in VS Code', click: () => openInVSCode(file) });
   if (dir) items.push({ label: 'Open in Explorer', click: () => shell.openPath(file) });
   else items.push({ label: 'Show in Explorer', click: () => shell.showItemInFolder(file) });
   items.push(
@@ -591,6 +779,264 @@ ipcMain.on('files:menu', (_e, { id, rel, dir }) => {
     { label: 'Copy relative path', click: () => clipboard.writeText(String(rel).replace(/\//g, path.sep)) }
   );
   Menu.buildFromTemplate(items).popup({ window: win });
+});
+
+// ---------------------------------------------------------------------------
+// Settings window (src/settings): a form over config.json and the global AGENTS.md
+// ---------------------------------------------------------------------------
+let settingsWin = null;
+const agentsPath = () => path.join(claudeDir(), 'AGENTS.md');
+const claudeMdPath = () => path.join(claudeDir(), 'CLAUDE.md');
+// Changing these needs a restart: sessions and the terminal read them once.
+const RESTART_KEYS = ['shell', 'shellArgs', 'claudeCommand', 'claudeConfigDir', 'env', 'projectsRoot', 'cwd', 'fontFamily', 'fontSize', 'theme', 'backgroundMaterial', 'showInTaskbar'];
+
+function openSettings(tab) {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    if (settingsWin.isMinimized()) settingsWin.restore();
+    settingsWin.show();
+    settingsWin.focus();
+    if (tab) settingsWin.webContents.send('settings:tab', tab);
+    return;
+  }
+  settingsWin = new BrowserWindow({
+    width: 860,
+    height: 680,
+    minWidth: 620,
+    minHeight: 420,
+    title: 'Claude Widget Settings',
+    backgroundColor: config.theme.background,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'settings', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  settingsWin.setMenu(null);
+  settingsWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  settingsWin.webContents.on('will-navigate', (ev) => ev.preventDefault());
+  if (tab) settingsWin.webContents.once('did-finish-load', () => settingsWin.webContents.send('settings:tab', tab));
+  settingsWin.on('closed', () => { settingsWin = null; });
+  settingsWin.loadFile(path.join(__dirname, 'settings', 'settings.html'));
+}
+
+// Opacity and pin state live in window-state.json once changed from the title bar, so show those.
+function effectiveSettings() {
+  return settingsLib.toForm({
+    ...config,
+    opacity: win ? win.getOpacity() : (state.opacity ?? config.opacity),
+    alwaysOnTop: win ? win.isAlwaysOnTop() : (state.alwaysOnTop ?? config.alwaysOnTop)
+  });
+}
+
+function registerHotkey(hotkey) {
+  globalShortcut.unregisterAll();
+  if (hotkey && !globalShortcut.register(hotkey, toggleWindow)) {
+    console.warn(`Could not register hotkey ${hotkey}`);
+    return false;
+  }
+  return true;
+}
+
+ipcMain.handle('settings:get', () => ({ form: effectiveSettings() }));
+
+ipcMain.handle('settings:save', (_e, formValues) => {
+  const { values, errors } = settingsLib.normalize(formValues, DEFAULT_CONFIG);
+  if (errors.length) return { errors };
+  const raw = readJson(configPath, {});
+  const before = loadConfig();
+  const next = { ...raw, ...values, theme: { ...(raw.theme || {}), ...(values.theme || {}) } };
+  writeJson(configPath, next);
+  config = loadConfig();
+  const restart = RESTART_KEYS.some((k) => JSON.stringify(before[k]) !== JSON.stringify(config[k]));
+
+  // Applied right away: opacity, pin state, hotkey.
+  const warnings = [];
+  if (win && !win.isDestroyed()) {
+    win.setOpacity(clampOpacity(config.opacity));
+    win.setAlwaysOnTop(!!config.alwaysOnTop, 'floating');
+  }
+  state.opacity = config.opacity;
+  state.alwaysOnTop = !!config.alwaysOnTop;
+  writeJson(statePath, state);
+  if (before.hotkey !== config.hotkey && !registerHotkey(config.hotkey)) warnings.push(`Hotkey ${config.hotkey} is taken or invalid`);
+  send('config:changed', { alwaysOnTop: state.alwaysOnTop });
+  return { form: effectiveSettings(), restart, errors: warnings };
+});
+
+ipcMain.handle('settings:browse', async (_e, current) => {
+  const r = await dialog.showOpenDialog(settingsWin || win, { defaultPath: current || os.homedir(), properties: ['openDirectory'] });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.on('settings:openJson', () => shell.openPath(configPath));
+ipcMain.on('settings:restart', () => { app.relaunch(); app.quit(); });
+
+// Setup tab (first launch, and Settings → Setup): which tools this machine has, whether Claude, Git and
+// GitHub are signed in / configured, and buttons that install or sign in through a visible terminal.
+const { execFile, spawn: spawnProcess } = require('child_process');
+
+const run = (cmd, args, opts = {}) => new Promise((resolve) => {
+  execFile(cmd, args, { timeout: 8000, windowsHide: true, ...opts }, (err, stdout, stderr) =>
+    resolve({ ok: !err, code: err ? err.code : 0, out: String(stdout || '').trim(), err: String(stderr || '').trim() }));
+});
+
+// Installers change PATH for new processes only, so read it fresh (registry on Windows, a login shell on
+// Linux) and adopt it: tools installed from the Setup tab then work without restarting the widget.
+async function refreshPath() {
+  if (isWin) {
+    const r = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      "[Environment]::ExpandEnvironmentVariables([Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'))"]);
+    if (r.ok && r.out) process.env.PATH = r.out;
+  } else {
+    const r = await run(process.env.SHELL || '/bin/bash', ['-lc', 'printf %s "$PATH"']);
+    if (r.ok && r.out) process.env.PATH = r.out;
+  }
+  const local = path.join(os.homedir(), '.local', 'bin'); // Claude Code's native installer
+  const sep = isWin ? ';' : ':';
+  if (!process.env.PATH.split(sep).some((d) => path.resolve(d) === path.resolve(local))) process.env.PATH += sep + local;
+}
+
+function findTool(tool) {
+  const env = { ...process.env, ...config.env };
+  const p = setupChecks.plat(isWin);
+  const hit = launch.findOnPath(tool.bins[p], { env, isWin });
+  if (hit) return hit;
+  return ((tool.extraPaths || {})[p] || []).map((rel) => path.join(os.homedir(), rel)).find((x) => fs.existsSync(x)) || null;
+}
+
+const version = async (file) => {
+  const r = /\.(cmd|bat)$/i.test(file)
+    ? await run(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `"${file}" --version`], { windowsVerbatimArguments: true })
+    : await run(file, ['--version']);
+  return r.ok ? r.out.split(/\r?\n/)[0].slice(0, 80) : '';
+};
+
+const linuxPm = () => (isWin ? null : setupChecks.LINUX_PMS.find((pm) => launch.findOnPath([pm.bin], { isWin: false })) || null);
+
+ipcMain.handle('setup:get', async () => {
+  await refreshPath();
+  const pm = linuxPm();
+  const tools = await Promise.all(setupChecks.TOOLS.map(async (t) => {
+    const found = findTool(t);
+    return {
+      id: t.id,
+      name: t.name,
+      why: t.why,
+      required: !!t.required,
+      path: found,
+      version: found ? await version(found) : '',
+      canInstall: !!setupChecks.installCommand(t, { isWin, pm }),
+      installCommand: setupChecks.installCommand(t, { isWin, pm })
+    };
+  }));
+  const byId = Object.fromEntries(tools.map((t) => [t.id, t]));
+
+  // Claude: signed in when its credentials file exists or an API key is set (the file is never read).
+  const claudeSignedIn = fs.existsSync(path.join(claudeDir(), '.credentials.json')) ||
+    !!(process.env.ANTHROPIC_API_KEY || (config.env || {}).ANTHROPIC_API_KEY);
+  let gitName = '';
+  let gitEmail = '';
+  if (byId.git.path) {
+    gitName = (await run(byId.git.path, ['config', '--global', 'user.name'])).out;
+    gitEmail = (await run(byId.git.path, ['config', '--global', 'user.email'])).out;
+  }
+  const ghSignedIn = byId.gh.path ? (await run(byId.gh.path, ['auth', 'status'])).ok : false;
+
+  const info = launchInfo();
+  return {
+    isWin,
+    pm: pm ? pm.id : null,
+    tools,
+    claudeSignedIn,
+    claudeDir: claudeDir(),
+    git: { name: gitName, email: gitEmail },
+    ghSignedIn,
+    gitBash: info.gitBash,
+    runtime: info.runtime,
+    globalHooks: JSON.stringify(globalClaudeSettings().hooks || {}).includes('workers-hook.js')
+  };
+});
+
+// Runs a command from the setup table in a new terminal window, so the user sees prompts and output.
+function runInTerminal(command) {
+  const tryRun = (cmd, args) => new Promise((resolve) => {
+    try {
+      // Same Claude config folder as widget sessions, so "Sign in" signs those sessions in.
+      const child = spawnProcess(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false, env: { ...process.env, ...claudeEnv() } });
+      child.on('error', () => resolve(false));
+      child.on('spawn', () => { child.unref(); resolve(true); });
+    } catch { resolve(false); }
+  });
+  if (isWin) return tryRun('powershell.exe', ['-NoExit', '-NoProfile', '-Command', command]);
+  const script = `${command}; echo; read -p "Done. Press Enter to close."`;
+  const terms = [
+    ['x-terminal-emulator', ['-e', 'bash', '-lc', script]],
+    ['kgx', ['--', 'bash', '-lc', script]],
+    ['gnome-terminal', ['--', 'bash', '-lc', script]],
+    ['konsole', ['-e', 'bash', '-lc', script]],
+    ['alacritty', ['-e', 'bash', '-lc', script]],
+    ['kitty', ['bash', '-lc', script]],
+    ['foot', ['bash', '-lc', script]],
+    ['xterm', ['-e', 'bash', '-lc', script]]
+  ];
+  return (async () => {
+    for (const [cmd, args] of terms) if (await tryRun(cmd, args)) return true;
+    return false;
+  })();
+}
+
+// kind: 'install' or 'signin'; id: a tool id from the table.
+ipcMain.handle('setup:run', async (_e, { kind, id }) => {
+  const tool = setupChecks.TOOLS.find((t) => t.id === id);
+  if (!tool) return { ok: false };
+  const command = kind === 'install' ? setupChecks.installCommand(tool, { isWin, pm: linuxPm() })
+    : kind === 'signin' ? setupChecks.signInCommand(id, isWin) : null;
+  if (!command) return { ok: false };
+  const ok = await runInTerminal(command);
+  if (!ok) clipboard.writeText(command);
+  return { ok, command };
+});
+
+ipcMain.handle('setup:gitIdentity', async (_e, { name, email }) => {
+  const git = findTool(setupChecks.TOOLS.find((t) => t.id === 'git'));
+  if (!git) return { error: 'Git is not installed' };
+  const n = setupChecks.cleanIdentity(name);
+  const m = setupChecks.cleanIdentity(email);
+  if (!n) return { error: 'Enter your name' };
+  if (!setupChecks.looksLikeEmail(m)) return { error: 'Enter a valid email' };
+  const a = await run(git, ['config', '--global', 'user.name', n]);
+  const b = await run(git, ['config', '--global', 'user.email', m]);
+  return a.ok && b.ok ? { ok: true } : { error: a.err || b.err || 'git config failed' };
+});
+
+ipcMain.on('setup:done', () => { state.setupDone = true; writeJson(statePath, state); });
+
+ipcMain.handle('agents:get', () => {
+  let text = '';
+  let exists = false;
+  try { text = fs.readFileSync(agentsPath(), 'utf8'); exists = true; } catch { /* not created yet */ }
+  if (!exists) text = '# Global instructions\n\nThese apply to every project.\n\n- \n';
+  let claudeMd = '';
+  try { claudeMd = fs.readFileSync(claudeMdPath(), 'utf8'); } catch { /* none yet */ }
+  return { path: agentsPath(), claudeMd: claudeMdPath(), text, exists, linked: settingsLib.hasImport(claudeMd) };
+});
+
+// Writes AGENTS.md, then makes sure ~/.claude/CLAUDE.md imports it (Claude Code reads CLAUDE.md, not AGENTS.md).
+ipcMain.handle('agents:save', (_e, text) => {
+  if (typeof text !== 'string') return { error: 'Nothing to save' };
+  try {
+    fs.mkdirSync(path.dirname(agentsPath()), { recursive: true });
+    fs.writeFileSync(agentsPath(), text, 'utf8');
+    let claudeMd = '';
+    try { claudeMd = fs.readFileSync(claudeMdPath(), 'utf8'); } catch { /* created below */ }
+    const updated = settingsLib.ensureImport(claudeMd);
+    if (updated !== null) fs.writeFileSync(claudeMdPath(), updated, 'utf8');
+    return { ok: true, linked: true, claudeMd: claudeMdPath() };
+  } catch (err) {
+    return { error: err.message };
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -642,11 +1088,13 @@ ipcMain.on('win:progress', (_e, { state, value }) => {
   if (!mode) return win.setProgressBar(-1);
   win.setProgressBar(state === 3 ? 2 : Math.min(100, Math.max(0, value)) / 100, { mode });
 });
-ipcMain.on('app:openConfig', () => shell.openPath(configPath));
+ipcMain.on('app:openConfig', () => openSettings());
 ipcMain.handle('clipboard:read', () => clipboard.readText());
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
+// Local dev servers (localhost, 127.0.0.1) open in the built-in browser; other web links in the default browser.
 ipcMain.on('shell:openExternal', (_e, url) => {
-  if (/^https?:\/\//.test(url)) shell.openExternal(url);
+  if (isLocalUrl(url)) browser.open(url);
+  else if (/^https?:\/\//.test(url)) shell.openExternal(url);
 });
 
 // ---------------------------------------------------------------------------
@@ -659,7 +1107,8 @@ function createTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show / hide', click: toggleWindow },
     { label: 'Restart Claude session', click: () => send('pty:restartActive') },
-    { label: 'Edit settings…', click: () => shell.openPath(configPath) },
+    { label: 'Settings…', click: () => openSettings() },
+    { label: 'Setup…', click: () => openSettings('setup') },
     { label: 'Reset window position', click: () => win && setBoundsExact(fitWorkArea(withRail(defaultBounds()))) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
@@ -678,9 +1127,8 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     createWindow();
     createTray();
-    if (config.hotkey && !globalShortcut.register(config.hotkey, toggleWindow)) {
-      console.warn(`Could not register hotkey ${config.hotkey}`);
-    }
+    if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => openSettings('setup'), 600));
+    registerHotkey(config.hotkey);
   });
 
   app.on('will-quit', () => {
@@ -695,5 +1143,26 @@ if (!app.requestSingleInstanceLock()) {
   // widget with the X button quits explicitly via win:close.
   app.on('window-all-closed', () => app.quit());
   // Quitting from the widget also closes any open Markdown popouts.
-  app.on('before-quit', () => { for (const md of mdWindows.values()) if (!md.isDestroyed()) md.destroy(); });
+  // Unsaved editors get one prompt for the whole quit; the rest of the popouts just close.
+  app.on('before-quit', (ev) => {
+    const dirty = [...editors.values()].filter((e) => e.dirty && !e.win.isDestroyed());
+    if (dirty.length) {
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning',
+        buttons: ['Quit anyway', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        message: `${dirty.length} file${dirty.length > 1 ? 's have' : ' has'} unsaved changes`,
+        detail: dirty.map((e) => e.file).join('\n')
+      });
+      if (choice === 1) {
+        ev.preventDefault();
+        dirty[0].win.focus();
+        return;
+      }
+    }
+    for (const e of editors.values()) { e.forceClose = true; if (!e.win.isDestroyed()) e.win.destroy(); }
+    for (const md of mdWindows.values()) if (!md.isDestroyed()) md.destroy();
+    browser.close();
+  });
 }

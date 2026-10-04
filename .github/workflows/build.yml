@@ -1,0 +1,42 @@
+# Builds the installers: Windows (NSIS .exe) and Linux (Arch .pacman, AppImage).
+# Run it from the Actions tab (Run workflow), or push a tag like v0.3.0. The files are attached to the run.
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # bsdtar packs the .pacman file; build-essential and python3 (compiling node-pty) are on the runner already.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - run: npm ci
+      # The tests use Windows paths, so they run on the Windows job only.
+      - if: runner.os == 'Windows'
+        run: npm test
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            dist/*.exe
+            dist/*.pacman
+            dist/*.AppImage
+          if-no-files-found: error

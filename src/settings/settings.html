@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; worker-src 'self' blob:">
+  <title>Settings</title>
+  <link rel="stylesheet" href="../../node_modules/monaco-editor/min/vs/editor/editor.main.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <nav id="tabs">
+    <button data-tab="general" class="on">General</button>
+    <button data-tab="appearance">Appearance</button>
+    <button data-tab="agents">Global instructions</button>
+    <button data-tab="setup">Setup</button>
+  </nav>
+
+  <form id="form" autocomplete="off">
+    <section data-tab="general" class="on">
+      <h2>Sessions</h2>
+      <label>Projects folder<span class="hint">Every subfolder is listed as a project</span>
+        <span class="row"><input name="projectsRoot"><button type="button" data-browse="projectsRoot">Browse…</button></span></label>
+      <label>Start folder<span class="hint">Project opened at launch when none was open last time</span>
+        <span class="row"><input name="cwd"><button type="button" data-browse="cwd">Browse…</button></span></label>
+      <label>Shell<input name="shell"></label>
+      <label>Shell arguments<span class="hint">The last one is replaced by the Claude command. Quote arguments with spaces</span><input name="shellArgs"></label>
+      <label>Claude command<span class="hint">Leave empty to use the last shell argument, else <code>claude</code></span><input name="claudeCommand" placeholder="claude"></label>
+      <label>Claude config folder<span class="hint">Sign-in, plugins, history and global settings for widget sessions (<code>CLAUDE_CONFIG_DIR</code>). Empty uses Claude's default <code>~/.claude</code></span>
+        <span class="row"><input name="claudeConfigDir" placeholder="~/.claude"><button type="button" data-browse="claudeConfigDir">Browse…</button></span></label>
+      <label>Environment variables<span class="hint">One <code>NAME=value</code> per line, added to every session</span><textarea name="env" rows="4" spellcheck="false"></textarea></label>
+
+      <h2>Window</h2>
+      <label>Show / hide hotkey<span class="hint">Electron accelerator, e.g. <code>Control+Alt+Space</code>. Empty turns it off</span><input name="hotkey"></label>
+      <label class="check"><input type="checkbox" name="alwaysOnTop"> Keep on top of other windows</label>
+      <label class="check"><input type="checkbox" name="showInTaskbar"> Show in the taskbar (needed for taskbar progress)</label>
+    </section>
+
+    <section data-tab="appearance">
+      <h2>Terminal</h2>
+      <label>Font<input name="fontFamily"></label>
+      <label>Font size<input name="fontSize" type="number" min="8" max="32"></label>
+      <h2>Window</h2>
+      <label>Opacity <output id="opacity-out"></output><input name="opacity" type="range" min="0.3" max="1" step="0.05"></label>
+      <label>Backdrop<span class="hint">Windows 11 22H2 or later</span>
+        <select name="backgroundMaterial">
+          <option value="none">None</option><option value="acrylic">Acrylic</option><option value="mica">Mica</option><option value="tabbed">Tabbed</option>
+        </select></label>
+      <h2>Colors</h2>
+      <div class="colors">
+        <label>Background<span class="row"><input type="color" data-color="background"><input name="theme.background"></span></label>
+        <label>Text<span class="row"><input type="color" data-color="foreground"><input name="theme.foreground"></span></label>
+        <label>Cursor<span class="row"><input type="color" data-color="cursor"><input name="theme.cursor"></span></label>
+        <label>Selection<span class="hint">8-digit hex adds transparency</span><span class="row"><input type="color" data-color="selectionBackground"><input name="theme.selectionBackground"></span></label>
+      </div>
+    </section>
+    <section data-tab="setup">
+      <p class="intro">Everything Claude needs on this machine. Install and sign-in buttons open a terminal window, so you can see what runs.</p>
+      <h2>Tools</h2>
+      <div id="checks"></div>
+      <h2>Accounts</h2>
+      <div id="accounts"></div>
+      <h2>Widget hooks</h2>
+      <label class="check"><input type="checkbox" name="claudeHooks"> Add the widget's hooks and status line to each Claude session</label>
+      <p class="hint-block">Worker rows, the "needs you" dot and the status footer come from Claude Code hooks. With this on, the
+        widget passes them to the sessions it starts (<code>claude --settings</code>), so nothing has to be added to
+        <code>~/.claude/settings.json</code>. Your own status line keeps working: the widget wraps it. <span id="hooks-info"></span></p>
+      <p class="row setup-actions"><button type="button" id="btn-recheck">Check again</button><button type="button" id="btn-setup-done" class="primary">Done</button></p>
+    </section>
+  </form>
+
+  <section id="agents" data-tab="agents">
+    <p class="intro">Instructions Claude follows in <b>every</b> project. Saved to <code id="agents-path"></code>;
+      <span id="agents-link"></span></p>
+    <div id="agents-editor"></div>
+  </section>
+
+  <footer>
+    <span id="status"></span>
+    <button type="button" id="btn-json">Open config.json</button>
+    <button type="button" id="btn-restart" hidden>Restart widget</button>
+    <button type="button" id="btn-save" class="primary">Save</button>
+  </footer>
+
+  <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

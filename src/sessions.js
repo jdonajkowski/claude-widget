@@ -4,15 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createLogTail } = require('./log-tail');
+const { isClaudeCommand } = require('./claude-launch');
 
-// Claude Code keeps a folder's history in ~/.claude/projects/<cwd with every non-alphanumeric char as '-'>.
+// Claude Code keeps a folder's history in <config dir>/projects/<cwd with every non-alphanumeric char as '-'>.
 function encodeHistoryDir(cwd) {
   return String(cwd).replace(/[^A-Za-z0-9]/g, '-');
 }
 
-function hasHistory(cwd, home) {
+function hasHistory(cwd, claudeDir) {
   try {
-    return fs.readdirSync(path.join(home, '.claude', 'projects', encodeHistoryDir(cwd))).some((f) => f.endsWith('.jsonl'));
+    return fs.readdirSync(path.join(claudeDir, 'projects', encodeHistoryDir(cwd))).some((f) => f.endsWith('.jsonl'));
   } catch {
     return false;
   }
@@ -20,9 +21,15 @@ function hasHistory(cwd, home) {
 
 // The command is config.claudeCommand, else the last shellArgs element (older configs put `claude.cmd`
 // there), else `claude`. It replaces the last shellArgs element so the shell prefix stays the user's.
-function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin }) {
+// settingsFile (the widget's hooks and status line, see claude-launch.js) is passed when it is Claude Code.
+function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin, settingsFile }) {
   const args = Array.isArray(shellArgs) && shellArgs.length ? shellArgs.slice() : null;
   let command = (typeof claudeCommand === 'string' && claudeCommand.trim()) || (args ? String(args[args.length - 1]) : 'claude');
+  if (settingsFile && isClaudeCommand(command)) {
+    // Single quotes work in PowerShell and POSIX shells; each escapes a quote its own way.
+    const q = isWin ? `'${settingsFile.replace(/'/g, "''")}'` : `'${settingsFile.replace(/'/g, "'\\''")}'`;
+    command += ` --settings ${q}`;
+  }
   if (cont) command += ' --continue';
   if (args) {
     args[args.length - 1] = command;
@@ -35,7 +42,9 @@ function sessionDir(userDir, id) {
   return path.join(userDir, 'sessions', crypto.createHash('sha1').update(id).digest('hex').slice(0, 12));
 }
 
-function createSessions({ pty, config, userDir, home, isWin, send, onStatus = () => {}, baseEnv = process.env, tailIntervalMs = 300 }) {
+// claudeDir: Claude Code's config folder for these sessions; extraEnv: variables added to each session (CLAUDE_CONFIG_DIR).
+function createSessions({ pty, config, userDir, home, isWin, send, onStatus = () => {}, settingsFile = () => null,
+  claudeDir = () => path.join(home, '.claude'), extraEnv = () => ({}), baseEnv = process.env, tailIntervalMs = 300 }) {
   const sessions = new Map();
 
   function resetFiles(s) {
@@ -46,14 +55,14 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
   }
 
   function spawn(s, cols, rows, cont) {
-    const { file, args } = buildLaunch(config, { cont, isWin });
+    const { file, args } = buildLaunch(config, { cont, isWin, settingsFile: settingsFile() });
     try {
       s.term = pty.spawn(file, args, {
         name: 'xterm-256color',
         cols: cols || 100,
         rows: rows || 30,
         cwd: s.cwd,
-        env: { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env, CLAUDE_WIDGET_WORKERS: s.workersPath, CLAUDE_WIDGET_STATUS: s.statusPath },
+        env: { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...extraEnv(), ...config.env, CLAUDE_WIDGET_WORKERS: s.workersPath, CLAUDE_WIDGET_STATUS: s.statusPath },
         useConpty: isWin ? true : undefined
       });
     } catch (err) {
@@ -95,7 +104,7 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
     s.tail = createLogTail(s.workersPath, (events) => send('workers:events', { id, events }), { intervalMs: tailIntervalMs });
     sessions.set(id, s);
     resetFiles(s);
-    spawn(s, cols, rows, hasHistory(cwd, home));
+    spawn(s, cols, rows, hasHistory(cwd, claudeDir()));
     return true;
   }
 

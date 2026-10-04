@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { safeJoin, listDir, openAction, mdFiles, findByTail } = require('../src/files');
+const { safeJoin, listDir, isTextFile, openAction, vscodeUrl, mdFiles, findByTail } = require('../src/files');
 
 function tree() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'files-test-'));
@@ -59,4 +59,27 @@ test('findByTail matches a bare name or partial path, shallowest first', () => {
   assert.equal(findByTail(files, 'usage.md', false), null);
   assert.equal(findByTail(files, 'SAGE.md'), null);
   assert.equal(findByTail(files, 'C:/x/USAGE.md'), null);
+});
+
+test('openAction sends text files to the editor when isText says so', () => {
+  const text = () => true;
+  assert.equal(openAction('notes.md', text), 'md');
+  assert.equal(openAction('main.js', text), 'edit');
+  assert.equal(openAction('tool.exe', () => false), 'reveal');
+  assert.equal(openAction('mockup.HTML', text), 'browse');
+  assert.equal(openAction('logo.svg'), 'browse');
+});
+
+test('isTextFile rejects binary and missing files', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'files-test-'));
+  fs.writeFileSync(path.join(root, 'a.txt'), 'hello\r\nworld');
+  fs.writeFileSync(path.join(root, 'b.bin'), Buffer.from([1, 0, 2]));
+  assert.equal(isTextFile(path.join(root, 'a.txt')), true);
+  assert.equal(isTextFile(path.join(root, 'b.bin')), false);
+  assert.equal(isTextFile(path.join(root, 'nope.txt')), false);
+});
+
+test('vscodeUrl keeps the drive colon and encodes spaces', () => {
+  assert.equal(vscodeUrl('C:\\Users\\me\\Claude Widget\\src\\main.js', 12), 'vscode://file/C:/Users/me/Claude%20Widget/src/main.js:12');
+  assert.equal(vscodeUrl('/home/me/a b.md'), 'vscode://file/home/me/a%20b.md');
 });

@@ -13,12 +13,31 @@ body {
   font: 15px/1.6 'Segoe UI', system-ui, sans-serif;
 }
 
-#path {
+#bar {
   position: sticky;
   top: 0;
-  padding: 6px 24px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 24px;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
+}
+#bar button {
+  padding: 1px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  font: 12px/18px 'Segoe UI', system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#bar button:hover { background: var(--code-bg); }
+#path {
+  flex: 1;
+  min-width: 0;
   color: var(--muted);
   font: 11px/18px 'Cascadia Mono', Consolas, monospace;
   white-space: nowrap;

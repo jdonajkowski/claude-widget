@@ -10,6 +10,7 @@ const IGNORED = new Set(['node_modules', '.git', 'dist', 'out', 'build', '.next'
 // so the pane shows them in Explorer instead of opening them.
 const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|mjs|cjs|wsf|wsh|msi|msp|lnk|scr|hta|reg|cpl|jar|pif|application|appref-ms|url|scf|ws)$/i;
 const MD = /\.(md|markdown)$/i;
+const PAGE = /\.(html?|svg)$/i;
 
 // Resolves rel inside root; null if it would escape the root.
 function safeJoin(root, rel = '') {
@@ -42,11 +43,39 @@ function listDir(root, rel = '') {
   return [...out.filter((e) => e.dir).sort(cmp), ...out.filter((e) => !e.dir).sort(cmp)];
 }
 
-// 'md' opens in the Markdown viewer, 'reveal' shows it in Explorer, 'open' uses the default app.
-function openAction(name) {
+const MAX_EDIT_BYTES = 5 * 1024 * 1024;
+
+// A file the editor can take: at most 5 MB, and no NUL byte in its first 8 KB (binary files have them).
+function isTextFile(file) {
+  let fd;
+  try {
+    if (fs.statSync(file).size > MAX_EDIT_BYTES) return false;
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(8192);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    return !buf.subarray(0, n).includes(0);
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+// 'md' opens in the Markdown viewer, 'browse' in the built-in browser, 'edit' in the editor,
+// 'reveal' shows it in Explorer, 'open' uses the default app.
+// Pass isText to let text files go to the editor; without it they fall through to reveal/open.
+function openAction(name, isText = () => false) {
   if (MD.test(name)) return 'md';
+  if (PAGE.test(name)) return 'browse';
+  if (isText(name)) return 'edit';
   if (RUNNABLE.test(name)) return 'reveal';
   return 'open';
+}
+
+// vscode://file/<path>[:line] opens a file (or folder) in VS Code without spawning a shell.
+function vscodeUrl(file, line) {
+  const p = String(file).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/').replace(/^([A-Za-z])%3A/, '$1:');
+  return `vscode://file/${p.startsWith('/') ? p.slice(1) : p}${line ? `:${line}` : ''}`;
 }
 
 // Every Markdown file under root (skipping ignored folders), as forward-slash relative paths.
@@ -77,4 +106,4 @@ function findByTail(files, tail, caseInsensitive) {
   return hits.sort((a, b) => a.split('/').length - b.split('/').length || a.length - b.length)[0];
 }
 
-module.exports = { IGNORED, safeJoin, listDir, openAction, mdFiles, findByTail };
+module.exports = { IGNORED, safeJoin, listDir, isTextFile, openAction, vscodeUrl, mdFiles, findByTail };
