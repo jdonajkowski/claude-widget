@@ -6,13 +6,23 @@ A borderless, always-on-top desktop widget that hosts [Claude Code](https://clau
 
 **Windows:** run `Claude Widget Setup <version>.exe`. It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
 
-**Arch Linux (and Arch-based distros):**
+**Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. The repo is private, so sign in with the GitHub CLI first (`gh auth login`), then either run the install script, which picks the right file and installs it:
 
 ```sh
-sudo pacman -U claude-widget-<version>.pacman
+gh api repos/jdonajkowski/claude-widget/contents/scripts/install-linux.sh -H 'Accept: application/vnd.github.raw' | bash
 ```
 
-It installs to `/opt/Claude Widget` with a menu entry. Any distro can also run the AppImage: `chmod +x Claude-Widget-<version>.AppImage` and start it.
+or download and install by hand:
+
+```sh
+gh release download -R jdonajkowski/claude-widget -p '*.pacman'    # Arch and Arch-based
+sudo pacman -U claude-widget-*.pacman
+
+gh release download -R jdonajkowski/claude-widget -p '*.AppImage'  # any distro (needs FUSE 2)
+chmod +x Claude*.AppImage && ./Claude*.AppImage
+```
+
+The package installs to `/opt/Claude Widget` with a menu entry. The script puts the AppImage in `~/.local/bin` with a menu entry. To update, run the same commands again. Add a version (`bash -s v0.3.0` for the script, `gh release download v0.3.0 …`) to get a specific release.
 
 **First launch** opens **Settings → Setup**, which checks this machine and fixes what's missing:
 
@@ -146,7 +156,13 @@ npm run dist        # Windows installer: dist/Claude Widget Setup <version>.exe
 bash scripts/build-linux.sh     # puts the .pacman and .AppImage in dist/
 ```
 
-Or let GitHub build both platforms: run **Build installers** from the repo's Actions tab, or push a tag like `v0.3.0`. The installers are attached to the run (`.github/workflows/build.yml`).
+Or let GitHub build both platforms (`.github/workflows/build.yml`): **Build installers** in the repo's Actions tab attaches the installers to the run. To publish a release, bump `version` in `package.json`, commit, and push a matching tag:
+
+```sh
+git tag v0.3.1 && git push origin v0.3.1
+```
+
+The build checks the tag matches `package.json`, then publishes the Windows `.exe`, the `.pacman` and the AppImage as the release `v0.3.1`.
 
 Notes:
 
@@ -181,6 +197,7 @@ src/browser/             Browser toolbar
 src/md/                  Markdown popout window
 hooks/                   workers-hook.js and statusline-tee.js, run by Claude Code
 scripts/build-linux.sh   Builds the Linux packages
+scripts/install-linux.sh Installs the latest release on Linux
 test/                    Unit tests (npm test)
 assets/                  App and tray icons
 backup/                  Source before the progress-bar patch, and a snapshot of a working config

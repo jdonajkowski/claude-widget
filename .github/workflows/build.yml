@@ -1,5 +1,6 @@
 # Builds the installers: Windows (NSIS .exe) and Linux (Arch .pacman, AppImage).
-# Run it from the Actions tab (Run workflow), or push a tag like v0.3.0. The files are attached to the run.
+# Run it from the Actions tab (Run workflow) to get them as run artifacts, or push a tag like v0.3.0
+# to also publish them as a GitHub Release (scripts/install-linux.sh installs from there).
 name: Build installers
 
 on:
@@ -27,6 +28,12 @@ jobs:
       # bsdtar packs the .pacman file; build-essential and python3 (compiling node-pty) are on the runner already.
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME but package.json says $version"; exit 1; }
       - run: npm ci
       # The tests use Windows paths, so they run on the Windows job only.
       - if: runner.os == 'Windows'
@@ -40,3 +47,23 @@ jobs:
             dist/*.pacman
             dist/*.AppImage
           if-no-files-found: error
+
+  # Tags only: publish everything the build jobs made as a GitHub Release (created, or updated if it exists).
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "Claude Widget ${GITHUB_REF_NAME#v}" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" out/* -R "$GITHUB_REPOSITORY" --clobber
