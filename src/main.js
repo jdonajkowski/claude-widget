@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
-const { createLogTail } = require('./log-tail');
+const { createSessions } = require('./sessions');
+const projects = require('./projects');
 const gitStatus = require('./git-status');
 const { summarize } = require('./footer');
 
@@ -17,6 +18,10 @@ const DEFAULT_CONFIG = {
   // open afterwards, so quitting Claude drops you at a prompt instead of closing.
   shell: isWin ? 'powershell.exe' : process.env.SHELL || '/bin/bash',
   shellArgs: isWin ? ['-NoLogo', '-NoExit', '-Command', 'claude'] : ['-lc', 'claude; exec $SHELL'],
+  // Command each project's session runs. Unset: the last shellArgs element (which it replaces), else `claude`.
+  claudeCommand: '',
+  // The rail lists every subfolder of projectsRoot plus pinned extras (projects.json).
+  projectsRoot: path.join(os.homedir(), 'Projects'),
   cwd: os.homedir(),
   env: {},
   alwaysOnTop: true,
@@ -38,10 +43,8 @@ const DEFAULT_CONFIG = {
 const userDir = app.getPath('userData');
 const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
-// Hook event log for the worker rows (written by hooks/workers-hook.js, see README).
-const workersLogPath = path.join(userDir, 'workers.jsonl');
-// Latest statusLine JSON for the footer (written by hooks/statusline-tee.js, see README).
-const statusPath = path.join(userDir, 'status.json');
+// Pinned extras and hidden projects for the rail, kept apart from the hand-edited config.json.
+const projectsPath = path.join(userDir, 'projects.json');
 
 function readJson(file, fallback) {
   try {
@@ -74,9 +77,60 @@ let state = readJson(statePath, {});
 // ---------------------------------------------------------------------------
 let win = null;
 let tray = null;
-let term = null;
-const workersTail = createLogTail(workersLogPath, (events) => send('workers:events', events));
 const mdWindows = new Map();
+let activeId = null;
+
+// One live session per opened project. Each one's worker log (hooks/workers-hook.js) and statusLine
+// JSON (hooks/statusline-tee.js) live in sessions/<hash>/, and its PTY env points the hooks there (see README).
+const sessions = createSessions({
+  pty,
+  config,
+  userDir,
+  home: os.homedir(),
+  isWin,
+  send,
+  onStatus: (id) => { if (id === activeId) pollGit(); }
+});
+
+// The project rail adds its width to the window, growing it to the left, so the terminal stays put.
+// window-state.json keeps the bounds without the rail.
+const RAIL_EXPANDED = 170;
+const RAIL_COLLAPSED = 36;
+const MIN_WIDTH = 320;
+const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : RAIL_EXPANDED);
+// Rail width when the window was maximized or went full screen, to fix the size on the way back.
+let zoomRail = null;
+
+const withRail = (b) => ({ ...b, x: b.x - railWidth(), width: b.width + railWidth() });
+
+// Keep the window on its display: shift it right first, shrink it (the terminal) only as a last resort.
+function fitWorkArea(b) {
+  const { workArea: wa } = screen.getDisplayMatching(b);
+  const out = { ...b };
+  if (out.x < wa.x) out.x = wa.x;
+  if (out.x + out.width > wa.x + wa.width) out.width = Math.max(MIN_WIDTH + railWidth(), wa.x + wa.width - out.x);
+  return out;
+}
+
+function applyRail(oldRail) {
+  const rail = railWidth();
+  win.setMinimumSize(MIN_WIDTH + rail, 180);
+  send('rail:state', { collapsed: !!state.railCollapsed, width: rail });
+  // Maximized or full screen: the window can't grow, so the terminal takes the difference.
+  if (win.isMaximized() || win.isFullScreen()) return;
+  const b = win.getBounds();
+  const delta = rail - oldRail;
+  setBoundsExact(fitWorkArea({ ...b, x: b.x - delta, width: b.width + delta }));
+}
+
+// At 125% scaling, setBounds on the frameless window lands a few px larger (+2 wide, +1 tall), and
+// repeated rail toggles would add that up. Measure once and set again with the error taken off.
+function setBoundsExact(target) {
+  win.setBounds(target);
+  const got = win.getBounds();
+  if (got.x === target.x && got.y === target.y && got.width === target.width && got.height === target.height) return;
+  win.setBounds({ x: 2 * target.x - got.x, y: 2 * target.y - got.y, width: 2 * target.width - got.width, height: 2 * target.height - got.height });
+}
 
 function defaultBounds() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -91,12 +145,12 @@ function boundsAreVisible(b) {
 }
 
 function createWindow() {
-  const bounds = state.bounds && boundsAreVisible(state.bounds) ? state.bounds : defaultBounds();
+  const bounds = fitWorkArea(withRail(state.bounds && boundsAreVisible(state.bounds) ? state.bounds : defaultBounds()));
   const material = isWin && config.backgroundMaterial !== 'none' ? config.backgroundMaterial : undefined;
 
   win = new BrowserWindow({
     ...bounds,
-    minWidth: 320,
+    minWidth: MIN_WIDTH + railWidth(),
     minHeight: 180,
     frame: false,
     show: false,
@@ -124,6 +178,7 @@ function createWindow() {
   // makes Windows restore it a few pixels off.
   win.once('ready-to-show', () => {
     win.show();
+    setBoundsExact(bounds);
     if (state.maximized) win.maximize();
   });
 
@@ -131,7 +186,10 @@ function createWindow() {
     if (!win || win.isDestroyed() || win.isMinimized()) return;
     // Keep the normal bounds while maximized or full screen, so leaving either returns to them.
     const zoomed = win.isMaximized() || win.isFullScreen();
-    if (!zoomed) state.bounds = win.getBounds();
+    if (!zoomed) {
+      const b = win.getBounds();
+      state.bounds = { ...b, x: b.x + railWidth(), width: b.width - railWidth() };
+    }
     if (!win.isFullScreen()) state.maximized = win.isMaximized();
     writeJson(statePath, state);
   };
@@ -139,8 +197,10 @@ function createWindow() {
   win.on('resized', saveState);
   win.on('close', saveState);
   win.on('closed', () => { win = null; });
+  win.on('focus', scanProjects);
   const sendZoom = () => send('win:zoom', { maximized: win.isMaximized(), fullScreen: win.isFullScreen() });
   win.webContents.on('did-finish-load', sendZoom);
+  for (const ev of ['maximize', 'enter-full-screen']) win.on(ev, () => { if (zoomRail === null) zoomRail = railWidth(); });
   // These events fire before Windows finishes the transition (and in bursts), so read the state once it settles.
   let zoomTimer;
   const onZoomChange = () => {
@@ -148,6 +208,11 @@ function createWindow() {
     zoomTimer = setTimeout(() => {
       if (!win || win.isDestroyed()) return;
       sendZoom();
+      // The rail changed while zoomed: Windows restored the old outer size, so apply the saved bounds plus today's rail.
+      if (!win.isMaximized() && !win.isFullScreen() && zoomRail !== null) {
+        if (zoomRail !== railWidth() && state.bounds) setBoundsExact(fitWorkArea(withRail(state.bounds)));
+        zoomRail = null;
+      }
       // Only the flag: bounds read mid-transition can be off, so they are saved on user moves/resizes only.
       if (!win.isFullScreen()) state.maximized = win.isMaximized();
       writeJson(statePath, state);
@@ -177,101 +242,195 @@ function toggleWindow() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// PTY
-// ---------------------------------------------------------------------------
-function spawnTerminal(cols, rows) {
-  killTerminal();
-  workersTail.reset();
-  resetStatus();
-  const cwd = fs.existsSync(config.cwd) ? config.cwd : os.homedir();
-  try {
-    term = pty.spawn(config.shell, config.shellArgs, {
-      name: 'xterm-256color',
-      cols: cols || 100,
-      rows: rows || 30,
-      cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env, CLAUDE_WIDGET_WORKERS: workersLogPath, CLAUDE_WIDGET_STATUS: statusPath },
-      useConpty: isWin ? true : undefined
-    });
-  } catch (err) {
-    send('pty:data', `\r\n\x1b[31mFailed to start ${config.shell}: ${err.message}\x1b[0m\r\n`);
-    return;
-  }
-  const current = term;
-  current.onData((data) => send('pty:data', data));
-  current.onExit(({ exitCode }) => {
-    if (term !== current) return; // replaced by a restart
-    term = null;
-    send('pty:exit', exitCode);
-  });
-}
-
-function killTerminal() {
-  if (!term) return;
-  const old = term;
-  term = null;
-  try { old.kill(); } catch { /* already gone */ }
-}
-
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
-ipcMain.on('pty:start', (_e, { cols, rows }) => spawnTerminal(cols, rows));
-ipcMain.on('pty:input', (_e, data) => term && term.write(data));
-ipcMain.on('pty:resize', (_e, { cols, rows }) => {
-  if (term && cols > 0 && rows > 0) {
-    try { term.resize(cols, rows); } catch { /* pty exited */ }
+// ---------------------------------------------------------------------------
+// Projects: subfolders of projectsRoot plus pinned extras, minus hidden ones
+// ---------------------------------------------------------------------------
+let saved = loadSaved();
+let projectList = [];
+let rootWarned = false;
+let rootWatcher = null;
+
+function loadSaved() {
+  const raw = readJson(projectsPath, {});
+  const strs = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x) : []);
+  return { pinned: strs(raw.pinned), hidden: strs(raw.hidden) };
+}
+
+function projectsRoot() {
+  return config.projectsRoot || path.join(os.homedir(), 'Projects');
+}
+
+function scanRoot() {
+  const root = projectsRoot();
+  try {
+    return fs.readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+      .map((d) => path.join(root, d.name));
+  } catch {
+    if (!rootWarned) {
+      rootWarned = true;
+      send('toast', `Projects folder not found: ${root}`);
+    }
+    return null;
   }
+}
+
+function scanProjects() {
+  const scanned = scanRoot();
+  const list = projects.buildList({ scanned: scanned || [], pinned: saved.pinned, hidden: saved.hidden, exists: (p) => fs.existsSync(p), isWin });
+  // A running session keeps its row even if its folder disappeared or was hidden, until it is closed.
+  const known = new Set(list.map((p) => p.id));
+  for (const id of sessions.ids()) {
+    if (known.has(id)) continue;
+    const cwd = sessions.cwd(id);
+    const name = path.basename(cwd) || cwd;
+    list.push({ id, path: cwd, name, initials: projects.initials(name), pinned: false, missing: !fs.existsSync(cwd), orphan: true });
+  }
+  list.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  projectList = list;
+  sendProjects();
+  if (scanned && !rootWatcher) watchRoot();
+}
+
+function sendProjects() {
+  send('projects:list', { list: projectList, open: sessions.ids(), active: activeId });
+}
+
+function watchRoot() {
+  let timer;
+  try {
+    rootWatcher = fs.watch(projectsRoot(), { persistent: false }, () => {
+      clearTimeout(timer);
+      timer = setTimeout(scanProjects, 300);
+    });
+    rootWatcher.on('error', () => { rootWatcher.close(); rootWatcher = null; });
+  } catch {
+    rootWatcher = null;
+  }
+}
+
+function saveProjects() {
+  writeJson(projectsPath, saved);
+  scanProjects();
+}
+
+// Launch: activeProject from window state, else config.cwd if it is a project, else the first project.
+function initialActive() {
+  const usable = (id) => projectList.find((p) => p.id === id && !p.missing);
+  const hit = (state.activeProject && usable(state.activeProject)) || usable(projects.normId(config.cwd, isWin)) || projectList.find((p) => !p.missing);
+  return hit ? hit.id : null;
+}
+
+ipcMain.handle('projects:get', () => {
+  scanProjects();
+  return { list: projectList, open: sessions.ids(), active: initialActive() };
+});
+
+// Makes a project active, starting its session the first time. Returns false for a missing folder.
+ipcMain.handle('project:open', (_e, { id, cols, rows }) => {
+  if (!sessions.has(id)) {
+    const p = projectList.find((x) => x.id === id);
+    if (!p || p.missing || !fs.existsSync(p.path)) return false;
+    sessions.open(id, p.path, cols, rows);
+  }
+  if (activeId !== id) {
+    activeId = id;
+    state.activeProject = id;
+    writeJson(statePath, state);
+    lastGit = undefined;
+    pollGit();
+  }
+  sendProjects();
+  return true;
+});
+
+function closeSession(id) {
+  if (!sessions.close(id)) return;
+  send('session:closed', { id });
+  scanProjects();
+}
+
+ipcMain.on('pty:input', (_e, { id, data }) => sessions.write(id, data));
+ipcMain.on('pty:resize', (_e, { id, cols, rows }) => sessions.resize(id, cols, rows));
+ipcMain.on('pty:restart', (_e, { id, cols, rows }) => sessions.restart(id, cols, rows));
+ipcMain.on('session:close', (_e, { id }) => closeSession(id));
+
+// Row context menu: Close session, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
+ipcMain.on('project:menu', (_e, { id }) => {
+  const p = projectList.find((x) => x.id === id);
+  if (!p || !win) return;
+  const items = [];
+  if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
+  items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
+  if (p.pinned) {
+    items.push({ label: 'Unpin', click: () => { saved.pinned = saved.pinned.filter((x) => projects.normId(x, isWin) !== id); saveProjects(); } });
+  } else if (!p.orphan) {
+    items.push({ label: 'Hide', click: () => { saved.hidden.push(id); saveProjects(); } });
+  }
+  Menu.buildFromTemplate(items).popup({ window: win });
+});
+
+// The + button: Add folder… (pinned) and Show hidden (n), which un-hides one project.
+ipcMain.on('projects:addMenu', () => {
+  if (!win) return;
+  const hidden = saved.hidden;
+  Menu.buildFromTemplate([
+    { label: 'Add folder…', click: addFolder },
+    {
+      label: `Show hidden (${hidden.length})`,
+      enabled: hidden.length > 0,
+      submenu: hidden.map((h) => ({ label: h, click: () => { saved.hidden = saved.hidden.filter((x) => x !== h); saveProjects(); } }))
+    }
+  ]).popup({ window: win });
+});
+
+async function addFolder() {
+  const r = await dialog.showOpenDialog(win, { title: 'Add project folder', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return;
+  const dir = r.filePaths[0];
+  const id = projects.normId(dir, isWin);
+  saved.hidden = saved.hidden.filter((x) => projects.normId(x, isWin) !== id);
+  if (!saved.pinned.some((x) => projects.normId(x, isWin) === id)) saved.pinned.push(dir);
+  saveProjects();
+  send('projects:select', { id });
+}
+
+ipcMain.on('rail:toggle', () => {
+  if (!win) return;
+  const old = railWidth();
+  state.railCollapsed = !state.railCollapsed;
+  writeJson(statePath, state);
+  applyRail(old);
 });
 
 // ---------------------------------------------------------------------------
-// Footer: statusLine JSON and git status of the session's folder
+// Footer: statusLine JSON per session, git status of the active session's folder
 // ---------------------------------------------------------------------------
-let statusMtime = 0;
-let sessionCwd = null; // the session's current folder, from the status JSON
 let gitBusy = false;
 let lastGit;
 
-function pollStatus() {
-  let mtime;
-  try { mtime = fs.statSync(statusPath).mtimeMs; } catch { return; }
-  if (mtime === statusMtime) return;
-  const status = readJson(statusPath, null);
-  if (!status) return; // mid-write: try again next poll
-  statusMtime = mtime;
-  send('status:update', status);
-  const cwd = (summarize(status) || {}).cwd;
-  if (cwd && cwd !== sessionCwd) {
-    sessionCwd = cwd;
-    pollGit();
-  }
-}
-
-function resetStatus() {
-  try { fs.rmSync(statusPath, { force: true }); } catch { /* stays stale until the next update */ }
-  statusMtime = 0;
-  sessionCwd = null;
-  lastGit = undefined;
-  send('status:update', null);
-  send('git:update', null);
-}
-
-function baseCwd() {
-  return sessionCwd || (fs.existsSync(config.cwd) ? config.cwd : os.homedir());
+// The session's current folder (from its status JSON), else the folder it started in.
+function baseCwd(id = activeId) {
+  const status = id ? summarize(sessions.status(id)) : null;
+  return (status && status.cwd) || (id && sessions.cwd(id)) || (fs.existsSync(config.cwd) ? config.cwd : os.homedir());
 }
 
 async function pollGit() {
-  if (gitBusy || !win || win.isDestroyed() || !win.isVisible()) return;
+  if (gitBusy || !activeId || !win || win.isDestroyed() || !win.isVisible()) return;
   gitBusy = true;
-  const info = await gitStatus.read(baseCwd());
+  const id = activeId;
+  const info = await gitStatus.read(baseCwd(id));
   gitBusy = false;
+  if (id !== activeId) return pollGit(); // switched while reading
   const json = JSON.stringify(info);
-  if (json !== lastGit) { lastGit = json; send('git:update', info); }
+  if (json !== lastGit) { lastGit = json; send('git:update', { id, info }); }
 }
 
-const statusTimer = setInterval(pollStatus, 500);
+const statusTimer = setInterval(() => sessions.pollStatus(), 500);
 const gitTimer = setInterval(pollGit, 3000);
 
 // ---------------------------------------------------------------------------
@@ -279,7 +438,7 @@ const gitTimer = setInterval(pollGit, 3000);
 // ---------------------------------------------------------------------------
 const MD_EXT = /\.(md|markdown)$/i;
 
-function resolveMd(p, from = baseCwd()) {
+function resolveMd(p, from) {
   let file = String(p).trim();
   if (/^file:\/\//i.test(file)) {
     try { file = require('url').fileURLToPath(file); } catch { return null; }
@@ -339,16 +498,18 @@ function openMd(file) {
 }
 
 // Candidates come from md-links.js, longest first; the first one that is an existing file wins.
-ipcMain.handle('md:resolve', (_e, candidates) => {
+// Relative paths resolve against the folder of the session that printed them.
+ipcMain.handle('md:resolve', (_e, { candidates, id }) => {
   if (!Array.isArray(candidates)) return null;
+  const from = baseCwd(id);
   for (let i = 0; i < candidates.length && i < 16; i++) {
-    const file = resolveMd(candidates[i]);
+    const file = resolveMd(candidates[i], from);
     if (file) return { index: i, file };
   }
   return null;
 });
-ipcMain.on('md:open', (_e, p) => {
-  const file = resolveMd(p);
+ipcMain.on('md:open', (_e, { file: p, id }) => {
+  const file = resolveMd(p, baseCwd(id));
   if (file) openMd(file);
 });
 // Links inside a popout: web links go to the browser, other Markdown files open in their own popout.
@@ -369,7 +530,8 @@ ipcMain.handle('config:get', () => ({
   theme: config.theme,
   transparent: isWin && config.backgroundMaterial !== 'none',
   alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop,
-  opacity: win ? win.getOpacity() : config.opacity
+  opacity: win ? win.getOpacity() : config.opacity,
+  rail: { collapsed: !!state.railCollapsed, width: railWidth() }
 }));
 ipcMain.handle('win:togglePin', () => {
   const next = !win.isAlwaysOnTop();
@@ -418,9 +580,9 @@ function createTray() {
   tray.on('click', toggleWindow);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show / hide', click: toggleWindow },
-    { label: 'Restart Claude session', click: () => send('pty:restart') },
+    { label: 'Restart Claude session', click: () => send('pty:restartActive') },
     { label: 'Edit settings…', click: () => shell.openPath(configPath) },
-    { label: 'Reset window position', click: () => win && win.setBounds(defaultBounds()) },
+    { label: 'Reset window position', click: () => win && setBoundsExact(fitWorkArea(withRail(defaultBounds()))) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]));
@@ -445,8 +607,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
-    killTerminal();
-    workersTail.close();
+    sessions.closeAll();
+    if (rootWatcher) rootWatcher.close();
     clearInterval(statusTimer);
     clearInterval(gitTimer);
   });

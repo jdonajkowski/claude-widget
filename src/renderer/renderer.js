@@ -1,47 +1,163 @@
-/* global Terminal, FitAddon, WebLinksAddon, WidgetWorkers, WidgetFooter, WidgetMdLinks */
+/* global WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
+  const $ = (id) => document.getElementById(id);
 
   if (cfg.transparent) document.body.classList.add('transparent');
   document.documentElement.style.setProperty('--bg', cfg.theme.background);
 
-  const term = new Terminal({
-    fontFamily: cfg.fontFamily,
-    fontSize: cfg.fontSize,
-    cursorBlink: true,
-    allowProposedApi: true,
-    allowTransparency: cfg.transparent,
-    scrollback: 10000,
-    theme: cfg.transparent ? { ...cfg.theme, background: '#00000000' } : cfg.theme,
-    // OSC 8 hyperlinks: Markdown files open in a popout, web links in the browser.
-    linkHandler: {
-      allowNonHttpProtocols: true,
-      activate: (_e, uri) => {
-        if (/^file:/i.test(uri) && /\.(md|markdown)$/i.test(uri.split(/[?#]/)[0])) widget.md.open(uri);
-        else if (/^https?:\/\//i.test(uri)) widget.openExternal(uri);
-      }
-    }
-  });
-  const fit = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => widget.openExternal(url)));
-  term.open(document.getElementById('terminal'));
-  fit.fit();
-
   // --- toast -------------------------------------------------------------
-  const toastEl = document.getElementById('toast');
+  const toastEl = $('toast');
   let toastTimer;
-  const toast = (msg) => {
+  const toast = (msg, ms = 1200) => {
     toastEl.textContent = msg;
     toastEl.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1200);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  };
+  widget.onToast((msg) => toast(msg, 4000));
+
+  // --- Per-session cache: dot state, worker events, footer status, progress, turn timer ---
+  const SS = WidgetSessionState;
+  const cache = new Map();
+  const sess = (id) => {
+    if (!cache.has(id)) {
+      cache.set(id, { state: SS.initial(), workerEvents: [], status: null, git: null, progress: { state: 0, value: 0 }, turnStart: null, lastTurnMs: null });
+    }
+    return cache.get(id);
+  };
+  let projects = [];
+  let openIds = new Set();
+  let activeId = null;
+
+  const update = (id, ev) => {
+    const s = sess(id);
+    s.state = SS.apply(s.state, ev, id === activeId);
+    renderRail();
   };
 
-  // --- OSC 9;4 progress (title-bar strip + taskbar) -----------------------
-  const progressEl = document.getElementById('progress');
-  const setProgress = (state, value) => {
+  // --- Terminals ----------------------------------------------------------
+  const terminals = WidgetTerminals.createTerminals({
+    widget,
+    cfg,
+    host: $('terminal'),
+    toast,
+    onInput: (id) => update(id, { t: 'input' }),
+    onProgress: (id, state, value) => {
+      const s = sess(id);
+      s.progress = { state, value };
+      trackTurn(s, state);
+      update(id, { t: 'progress', state });
+      if (id === activeId) { renderProgress(); renderFooter(); }
+      renderTaskbar();
+    }
+  });
+  terminals.setOnRestart((id) => {
+    cache.delete(id);
+    update(id, { t: 'start' });
+    if (id === activeId) renderActive();
+    renderTaskbar();
+  });
+
+  widget.pty.onData(({ id, data }) => terminals.write(id, data));
+  widget.pty.onExit(({ id, code }) => {
+    terminals.markExited(id, code);
+    const s = sess(id);
+    s.progress = { state: 0, value: 0 };
+    trackTurn(s, 0);
+    update(id, { t: 'exit' });
+    if (id === activeId) renderActive();
+    renderTaskbar();
+  });
+  widget.pty.onRestartActive(() => activeId && terminals.restart(activeId));
+
+  // --- Rail ---------------------------------------------------------------
+  const rail = WidgetRail.createRail({
+    el: $('rail'),
+    onOpen: (id) => activate(id),
+    onMenu: (id) => widget.projects.menu(id),
+    onAdd: () => widget.projects.addMenu()
+  });
+  rail.setCollapsed(cfg.rail.collapsed, cfg.rail.width);
+  widget.rail.onState(({ collapsed, width }) => rail.setCollapsed(collapsed, width));
+  $('btn-rail').onclick = () => widget.rail.toggle();
+
+  function renderRail() {
+    rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state) });
+  }
+
+  widget.projects.onList(({ list, open }) => {
+    projects = list;
+    openIds = new Set(open);
+    renderRail();
+  });
+  widget.projects.onSelect(({ id }) => activate(id));
+  widget.projects.onClosed(({ id }) => {
+    terminals.destroy(id);
+    cache.delete(id);
+    openIds.delete(id);
+    renderRail();
+    renderTaskbar();
+    if (id === activeId) {
+      showPlaceholder('Session closed. Press Enter or click the project to start it again.');
+      renderActive();
+    }
+  });
+
+  // --- Switching ----------------------------------------------------------
+  const placeholderEl = $('placeholder');
+  function showPlaceholder(text) {
+    placeholderEl.textContent = text;
+    placeholderEl.hidden = !text;
+  }
+
+  let switching = Promise.resolve();
+  function activate(id) {
+    switching = switching.then(() => doActivate(id)).catch(() => {});
+    return switching;
+  }
+
+  async function doActivate(id) {
+    const p = projects.find((x) => x.id === id);
+    if (!p) return;
+    if (p.missing && !terminals.has(id)) return toast(`Folder missing: ${p.path}`, 2500);
+    const fresh = !terminals.has(id);
+    if (fresh) terminals.create(id);
+    const t = terminals.show(id);
+    const ok = await widget.projects.open(id, t.term.cols, t.term.rows);
+    if (!ok) {
+      terminals.destroy(id);
+      toast(`Folder missing: ${p.path}`, 2500);
+      if (activeId && terminals.has(activeId)) terminals.show(activeId);
+      return;
+    }
+    activeId = id;
+    openIds.add(id);
+    showPlaceholder('');
+    update(id, { t: 'activate' });
+    renderActive();
+  }
+
+  // Everything that shows the active session: title, progress strip, workers, footer.
+  function renderActive() {
+    const p = projects.find((x) => x.id === activeId);
+    $('title-text').textContent = p ? p.name : 'Claude Code';
+    $('title').title = p ? p.path : '';
+    const t = activeId && terminals.get(activeId);
+    document.body.classList.toggle('exited', !t || t.exited);
+    rowEls.forEach((el) => el.remove());
+    rowEls.clear();
+    renderProgress();
+    renderWorkers();
+    renderFooter();
+    renderRail();
+  }
+
+  // --- OSC 9;4 progress: strip shows the active session, taskbar is busy while any session works ---
+  const progressEl = $('progress');
+  function renderProgress() {
+    const { state, value } = activeId ? sess(activeId).progress : { state: 0, value: 0 };
     progressEl.className = '';
     if (state >= 1 && state <= 4) {
       progressEl.classList.add('on');
@@ -52,31 +168,26 @@
     } else {
       progressEl.style.width = '0';
     }
+  }
+
+  let lastTaskbar = '';
+  function renderTaskbar() {
+    const active = activeId && cache.has(activeId) ? cache.get(activeId).progress : { state: 0, value: 0 };
+    const busy = [...cache.entries()].some(([id, s]) => openIds.has(id) && s.state.working);
+    const { state, value } = active.state ? active : busy ? { state: 3, value: 0 } : { state: 0, value: 0 };
+    const key = `${state}:${value}`;
+    if (key === lastTaskbar) return;
+    lastTaskbar = key;
     widget.win.progress(state, value);
-    trackTurn(state);
-  };
-  term.parser.registerOscHandler(9, (data) => {
-    const m = /^4;(\d)(?:;(\d{1,3}))?/.exec(data);
-    if (!m) return false; // not a progress sequence; leave other OSC 9 uses alone
-    setProgress(Number(m[1]), Number(m[2] || 0));
-    return true;
-  });
+  }
 
   // --- Side panel: worker rows on top, status footer at the bottom ------------
-  const sideEl = document.getElementById('side');
-  const workersEl = document.getElementById('workers');
-  const countEl = document.getElementById('workers-count');
-  const footerEl = document.getElementById('footer');
+  const sideEl = $('side');
+  const workersEl = $('workers');
+  const countEl = $('workers-count');
+  const footerEl = $('footer');
   let workerCount = 0;
   const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden; };
-
-  // --- Footer: model, cost, context, rate limits (statusLine), git, turn timer ---
-  const $ = (id) => document.getElementById(id);
-  let status = null;
-  let git = null;
-  let turnStart = null;
-  let lastTurnMs = null;
-  let turnTimer = null;
 
   const setLevel = (el, pct) => {
     el.classList.remove('warm', 'hot');
@@ -84,9 +195,13 @@
     if (lv) el.classList.add(lv);
   };
 
-  const renderFooter = () => {
+  function renderFooter() {
     const now = Date.now();
-    const s = status;
+    const a = activeId ? sess(activeId) : null;
+    const s = a && a.status;
+    const git = a && a.git;
+    const turnStart = a ? a.turnStart : null;
+    const lastTurnMs = a ? a.lastTurnMs : null;
     $('f-model').textContent = s && s.model ? (s.effort ? `${s.model} · ${s.effort}` : s.model) : '';
     $('f-cost').textContent = s && s.cost !== null ? `$${s.cost.toFixed(2)}` : '';
     $('f-ctx-row').hidden = !s || s.ctxPct === null;
@@ -113,39 +228,29 @@
       : lastTurnMs !== null ? `last ${WidgetFooter.fmtDuration(lastTurnMs)}` : '';
     footerEl.hidden = !s && !git && turnStart === null && lastTurnMs === null;
     updateSide();
-  };
-
-  // Claude Code sets OSC 9;4 progress when a turn starts and clears it when the turn ends.
-  function trackTurn(state) {
-    if (state >= 1 && state <= 4 && turnStart === null) {
-      turnStart = Date.now();
-      if (!turnTimer) turnTimer = setInterval(renderFooter, 1000);
-    } else if (state === 0 && turnStart !== null) {
-      lastTurnMs = Date.now() - turnStart;
-      turnStart = null;
-      clearInterval(turnTimer);
-      turnTimer = null;
-    }
-    renderFooter();
   }
 
-  widget.status.onUpdate((raw) => { status = WidgetFooter.summarize(raw); renderFooter(); });
-  widget.status.onGit((info) => { git = info; renderFooter(); });
+  // Claude Code sets OSC 9;4 progress when a turn starts and clears it when the turn ends.
+  function trackTurn(s, state) {
+    if (state >= 1 && state <= 4 && s.turnStart === null) {
+      s.turnStart = Date.now();
+    } else if (state === 0 && s.turnStart !== null) {
+      s.lastTurnMs = Date.now() - s.turnStart;
+      s.turnStart = null;
+    }
+  }
 
-  const resetFooter = () => {
-    status = null;
-    git = null;
-    turnStart = null;
-    lastTurnMs = null;
-    clearInterval(turnTimer);
-    turnTimer = null;
-    renderFooter();
-  };
+  widget.status.onUpdate(({ id, status }) => {
+    sess(id).status = WidgetFooter.summarize(status);
+    if (id === activeId) renderFooter();
+  });
+  widget.status.onGit(({ id, info }) => {
+    sess(id).git = info;
+    if (id === activeId) renderFooter();
+  });
 
   // --- Worker rows (subagents + background shells, fed by hooks/workers-hook.js) ---
   const MAX_ROWS = 20;
-  let workerEvents = [];
-  let workerTimer = null;
   const rowEls = new Map();
 
   const fmtElapsed = (ms) => {
@@ -160,9 +265,9 @@
     return row;
   };
 
-  const renderWorkers = () => {
+  function renderWorkers() {
     const now = Date.now();
-    const workers = WidgetWorkers.reduce(workerEvents, now);
+    const workers = activeId ? WidgetWorkers.reduce(sess(activeId).workerEvents, now) : [];
     const shown = workers.slice(0, MAX_ROWS);
     const keep = new Set(shown.map((w) => w.id));
     for (const [id, el] of rowEls) if (!keep.has(id)) { el.remove(); rowEls.delete(id); }
@@ -195,169 +300,84 @@
     countEl.classList.toggle('idle', running === 0);
     workerCount = workers.length;
     updateSide();
-    if (workers.length === 0 && workerTimer) { clearInterval(workerTimer); workerTimer = null; }
-  };
+  }
 
-  const clearWorkers = () => {
-    workerEvents = [];
-    renderWorkers();
-  };
-
-  widget.workers.onEvents((events) => {
-    workerEvents = workerEvents.concat(events);
-    renderWorkers();
-    if (!workerTimer) workerTimer = setInterval(renderWorkers, 1000);
+  widget.workers.onEvents(({ id, events }) => {
+    const s = sess(id);
+    s.workerEvents = s.workerEvents.concat(events);
+    // Permission prompts and questions (hooks/workers-hook.js) turn the row's dot to "needs you".
+    if (events.some((e) => e && e.t === 'attention')) update(id, { t: 'attention' });
+    if (id === activeId) renderWorkers();
   });
 
-  // --- PTY wiring ----------------------------------------------------------
-  const start = () => {
-    document.body.classList.remove('exited');
-    clearWorkers();
-    resetFooter();
-    setProgress(0, 0);
-    term.reset();
-    fit.fit();
-    widget.pty.start(term.cols, term.rows);
-  };
+  // Elapsed times in the worker rows and the turn timer tick once a second.
+  setInterval(() => {
+    if (!activeId) return;
+    const s = sess(activeId);
+    if (s.workerEvents.length) renderWorkers();
+    if (s.turnStart !== null) renderFooter();
+  }, 1000);
 
-  widget.pty.onData((data) => term.write(data));
-  widget.pty.onExit((code) => {
-    document.body.classList.add('exited');
-    term.write(`\r\n\x1b[90m[session ended (exit ${code}). Press Enter to restart]\x1b[0m\r\n`);
-  });
-  widget.pty.onRestart(start);
-
-  term.onData((data) => {
-    if (document.body.classList.contains('exited')) {
-      if (data === '\r') start();
-      return;
-    }
-    widget.pty.write(data);
-  });
-  term.onResize(({ cols, rows }) => widget.pty.resize(cols, rows));
-
-  // --- Markdown paths in the output open rendered in a popout (click) -------
-  // Wrapped rows are joined so a long path that spans rows is still one link.
-  term.registerLinkProvider({
-    provideLinks(y, callback) {
-      const buf = term.buffer.active;
-      let first = y - 1;
-      while (first > 0 && buf.getLine(first) && buf.getLine(first).isWrapped) first--;
-      let last = y - 1;
-      while (buf.getLine(last + 1) && buf.getLine(last + 1).isWrapped) last++;
-      let text = '';
-      for (let r = first; r <= last; r++) {
-        const line = buf.getLine(r);
-        if (line) text += line.translateToString(r === last);
-      }
-      const matches = WidgetMdLinks.find(text);
-      if (!matches.length) return callback(undefined);
-      const cols = term.cols;
-      const pos = (i) => ({ x: (i % cols) + 1, y: first + Math.floor(i / cols) + 1 });
-      Promise.all(matches.map((m) => widget.md.resolve(m.candidates.map((c) => c.path))
-        .then((hit) => hit && { c: m.candidates[hit.index], file: hit.file })))
-        .then((hits) => {
-          const links = hits.filter(Boolean).map(({ c, file }) => ({
-            range: { start: pos(c.start), end: pos(c.end - 1) },
-            text: c.path,
-            decorations: { underline: true, pointerCursor: true },
-            activate: () => widget.md.open(file)
-          })).filter((l) => l.range.start.y <= y && l.range.end.y >= y);
-          callback(links.length ? links : undefined);
-        }, () => callback(undefined));
-    }
-  });
-
-  // Debounced so a burst of size changes (window drag, worker panel opening) resizes the PTY once.
+  // Debounced so a burst of size changes (window drag, rail or worker panel opening) resizes the PTY once.
   let fitTimer;
   new ResizeObserver(() => {
     clearTimeout(fitTimer);
-    fitTimer = setTimeout(() => {
-      try { fit.fit(); } catch { /* not visible yet */ }
-    }, 60);
-  }).observe(document.getElementById('terminal'));
+    fitTimer = setTimeout(() => terminals.fitActive(), 60);
+  }).observe($('terminal'));
 
-  // --- Keyboard: copy/paste, newline, restart -----------------------------
-  term.attachCustomKeyEventHandler((e) => {
-    if (e.type !== 'keydown') return true;
-    const key = e.key.toLowerCase();
-
-    // Ctrl+C copies when text is selected, otherwise it is sent as SIGINT.
-    if (e.ctrlKey && !e.shiftKey && key === 'c' && term.hasSelection()) {
-      widget.clipboard.write(term.getSelection());
-      term.clearSelection();
-      return false;
+  // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B ---
+  // The rail toggle is Ctrl+Shift+B, not Ctrl+B: Claude Code uses Ctrl+B to background a running command.
+  window.addEventListener('keydown', (e) => {
+    const handled = () => { e.preventDefault(); e.stopPropagation(); };
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && /^[1-9]$/.test(e.key)) {
+      handled();
+      const p = projects[Number(e.key) - 1];
+      if (p) activate(p.id);
+    } else if (e.ctrlKey && !e.altKey && e.key === 'Tab') {
+      handled();
+      const open = projects.filter((p) => openIds.has(p.id));
+      if (open.length < 2) return;
+      const i = open.findIndex((p) => p.id === activeId);
+      activate(open[(i + (e.shiftKey ? -1 : 1) + open.length) % open.length].id);
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'b') {
+      handled();
+      widget.rail.toggle();
+    } else if (e.key === 'Enter' && !placeholderEl.hidden && activeId && !terminals.has(activeId)) {
+      handled();
+      activate(activeId);
     }
-    if (e.ctrlKey && e.shiftKey && key === 'c') {
-      if (term.hasSelection()) widget.clipboard.write(term.getSelection());
-      return false;
-    }
-    // Ctrl+V / Ctrl+Shift+V paste (bracketed paste handled by xterm).
-    if (e.ctrlKey && key === 'v') {
-      widget.clipboard.read().then((text) => text && term.paste(text));
-      return false;
-    }
-    // Shift+Enter inserts a newline in Claude Code's prompt (sent as Esc+Enter).
-    if (e.shiftKey && !e.ctrlKey && !e.altKey && key === 'enter') {
-      widget.pty.write('\x1b\r');
-      return false;
-    }
-    if (key === 'f11' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-      widget.win.toggleFullScreen();
-      return false;
-    }
-    if (e.ctrlKey && e.shiftKey && key === 'r') {
-      start();
-      return false;
-    }
-    // Ctrl+= / Ctrl+- zoom the font.
-    if (e.ctrlKey && (key === '=' || key === '+' || key === '-')) {
-      const size = Math.min(32, Math.max(8, term.options.fontSize + (key === '-' ? -1 : 1)));
-      term.options.fontSize = size;
-      fit.fit();
-      toast(`Font ${size}px`);
-      return false;
-    }
-    return true;
-  });
-
-  // Right-click: copy selection if any, otherwise paste (Windows Terminal style).
-  document.getElementById('terminal').addEventListener('contextmenu', async (e) => {
-    e.preventDefault();
-    if (term.hasSelection()) {
-      widget.clipboard.write(term.getSelection());
-      term.clearSelection();
-      toast('Copied');
-    } else {
-      const text = await widget.clipboard.read();
-      if (text) term.paste(text);
-    }
-  });
+  }, true);
 
   // --- Title bar buttons --------------------------------------------------
-  const pinBtn = document.getElementById('btn-pin');
+  const pinBtn = $('btn-pin');
   pinBtn.classList.toggle('on', cfg.alwaysOnTop);
 
-  document.getElementById('btn-restart').onclick = start;
-  document.getElementById('btn-fade').onclick = async () => toast(`Opacity ${Math.round((await widget.win.opacity(-0.05)) * 100)}%`);
-  document.getElementById('btn-solid').onclick = async () => toast(`Opacity ${Math.round((await widget.win.opacity(0.05)) * 100)}%`);
+  $('btn-restart').onclick = () => activeId && terminals.restart(activeId);
+  $('btn-fade').onclick = async () => toast(`Opacity ${Math.round((await widget.win.opacity(-0.05)) * 100)}%`);
+  $('btn-solid').onclick = async () => toast(`Opacity ${Math.round((await widget.win.opacity(0.05)) * 100)}%`);
   pinBtn.onclick = async () => {
     const on = await widget.win.togglePin();
     pinBtn.classList.toggle('on', on);
     toast(on ? 'Pinned on top' : 'Unpinned');
   };
-  document.getElementById('btn-settings').onclick = () => widget.openConfig();
-  document.getElementById('btn-min').onclick = () => widget.win.hide();
-  document.getElementById('btn-close').onclick = () => widget.win.close();
+  $('btn-settings').onclick = () => widget.openConfig();
+  $('btn-min').onclick = () => widget.win.hide();
+  $('btn-close').onclick = () => widget.win.close();
   // Double-clicking the bar maximizes natively (it is an OS drag region).
-  const maxBtn = document.getElementById('btn-max');
+  const maxBtn = $('btn-max');
   maxBtn.onclick = () => widget.win.toggleMaximize();
   widget.win.onZoom(({ maximized, fullScreen }) => {
     maxBtn.textContent = maximized || fullScreen ? '❐' : '□';
     maxBtn.title = fullScreen ? 'Exit full screen (F11)' : maximized ? 'Restore' : 'Maximize (F11 for full screen)';
   });
 
-  window.addEventListener('focus', () => term.focus());
-  term.focus();
-  start();
+  window.addEventListener('focus', () => terminals.focus());
+
+  // --- Launch: open the last active project; every other one stays idle until clicked ---
+  const initial = await widget.projects.get();
+  projects = initial.list;
+  openIds = new Set(initial.open);
+  renderRail();
+  if (initial.active) activate(initial.active);
+  else showPlaceholder('No projects yet. Add a folder with + in the project list.');
 })();

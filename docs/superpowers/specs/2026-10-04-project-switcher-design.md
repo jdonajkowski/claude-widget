@@ -1,7 +1,7 @@
 # Project switcher with live sessions
 
 Date: 2026-10-04
-Status: approved design, not yet implemented
+Status: implemented (plan: docs/superpowers/plans/2026-10-04-project-switcher.md)
 
 ## Goal
 
@@ -23,7 +23,7 @@ Not doing: drag-to-reorder, most-recently-used ordering, a cap on open sessions,
 ## 1. Layout and window sizing
 
 - Columns, left to right: **project rail | terminal | side panel**. The terminal and side panel keep their current sizes.
-- Expanding the rail (170px) grows the window 170px **to the left**, so the terminal stays where it is on screen. Collapsing it (Ctrl+B or a title-bar button) shrinks the rail to 36px and the window by 134px.
+- Expanding the rail (170px) grows the window 170px **to the left**, so the terminal stays where it is on screen. Collapsing it (Ctrl+Shift+B or a title-bar button) shrinks the rail to 36px and the window by 134px.
 - If growing left would push the window past the work area of its display, the window shifts right just enough to fit. If even that can't fit, the terminal shrinks as a last resort.
 - Resizing the window by hand changes only the terminal's width, as today.
 - `window-state.json` stores the bounds of the window **without** the rail, plus `railCollapsed` and `activeProject`. On restore, the rail width is added back the same way.
@@ -62,7 +62,7 @@ Behavior:
 - **Per-session cache:** worker events, latest status (footer), progress state and turn timer. The worker panel, Workers header and footer always show the active session and re-render from the cache on switch.
 - The title bar shows the active project's folder name.
 - The 2px progress strip shows the active session's state. Taskbar progress is busy while **any** session is working.
-- **Keyboard (caught before xterm):** Ctrl+1…9 opens the Nth project in the list, Ctrl+Tab / Ctrl+Shift+Tab cycle through open sessions in list order, and Ctrl+B toggles the rail.
+- **Keyboard (caught before xterm):** Ctrl+1…9 opens the Nth project in the list, Ctrl+Tab / Ctrl+Shift+Tab cycle through open sessions in list order, and Ctrl+Shift+B toggles the rail (changed from Ctrl+B during implementation: Claude Code uses Ctrl+B to background a running command).
 - When a session's shell exits, only its terminal shows the existing "exited" state.
 
 ## 4. Project list

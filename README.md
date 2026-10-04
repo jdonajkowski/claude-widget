@@ -5,6 +5,7 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 ## Features
 
 - Frameless, resizable window that remembers its size and position
+- Project switcher: a list of projects on the left, each with its own live Claude Code session, and a dot showing whether it is working, needs you, finished while you were away, or idle
 - Global hotkey to show/hide (default `Ctrl+Alt+Space`) and a tray icon with a menu
 - Pin on top, adjustable opacity, and optional Windows 11 acrylic/mica backdrop
 - Terminal progress bar: Claude Code's OSC 9;4 progress is drawn under the title bar and on the taskbar icon
@@ -22,6 +23,9 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 | Paste | `Ctrl+V` / `Ctrl+Shift+V` |
 | Newline in Claude's prompt | `Shift+Enter` |
 | Restart session | `Ctrl+Shift+R` |
+| Open the Nth project in the list | `Ctrl+1` … `Ctrl+9` |
+| Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Maximize / restore | Title-bar □ button, or double-click the title bar |
 | Full screen | `F11` |
@@ -36,8 +40,10 @@ Settings live in `%APPDATA%\Claude Widget\config.json` (the gear button or tray 
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `shell` / `shellArgs` | `powershell.exe -NoLogo -NoExit -Command claude` | Command that starts Claude Code |
-| `cwd` | home folder | Starting directory |
+| `shell` / `shellArgs` | `powershell.exe -NoLogo -NoExit -Command claude` | Shell that hosts each session. Its last argument is replaced by the Claude command |
+| `claudeCommand` | last `shellArgs` element, else `claude` | Command each project's session runs. ` --continue` is added the first time a project with Claude history is opened |
+| `projectsRoot` | `~\Projects` | Every subfolder (except names starting with `.`) is listed as a project |
+| `cwd` | home folder | Project to open at launch when no project was open last time, if it is in the list |
 | `env` | `{}` | Extra environment variables for the session |
 | `alwaysOnTop` | `true` | |
 | `opacity` | `0.95` | 0.3–1 |
@@ -47,7 +53,20 @@ Settings live in `%APPDATA%\Claude Widget\config.json` (the gear button or tray 
 | `fontFamily` / `fontSize` | Cascadia Mono, 13 | |
 | `theme` | dark | xterm.js theme colors |
 
-Window position, pin state and opacity are saved separately in `window-state.json` in the same folder.
+Window position, pin state, opacity, the project list's collapsed state and the active project are saved separately in `window-state.json` in the same folder. The saved bounds exclude the project list, whose width is added on the left.
+
+### Project list
+
+The list on the left shows every subfolder of `projectsRoot` plus folders you pin from anywhere (📌), in alphabetical order. Click a project to switch to it. The session you leave keeps running in the background. A project's session starts the first time you open it in a widget run, with `--continue` if Claude has history for that folder. ↻ restarts only the active session, with a fresh conversation. Expanding the list (170px) grows the window to the left. Collapsed (36px), it shows two-letter initials.
+
+| Dot | Meaning |
+| --- | --- |
+| Pulsing orange | Working (OSC 9;4 progress) |
+| Amber half | Needs you: a permission prompt or a question (needs the `Notification` hook below) |
+| Green ✓ | Finished while you were looking at another project |
+| Grey ring | Idle or not started |
+
+Right-click a project for Close session, Open in Explorer, and Hide (Unpin for pinned folders). The + button adds a folder or un-hides one. Pins and hidden projects are saved in `%APPDATA%\Claude Widget\projects.json`.
 
 ### Progress bar
 
@@ -68,11 +87,12 @@ The widget shows a row for each running subagent and background shell, in a side
   "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
   "SubagentStop":  [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
   "Stop":          [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
-  "PostToolUse":   [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }]
+  "PostToolUse":   [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }],
+  "Notification":  [{ "hooks": [{ "type": "command", "command": "node \"C:/Users/<you>/AppData/Local/Programs/claude-desktop-widget/resources/app/hooks/workers-hook.js\"" }] }]
 }
 ```
 
-Replace `<you>` with your Windows user name. The hook only acts inside the widget: it checks `CLAUDE_WIDGET_WORKERS`, which the widget sets for its session, so other Claude sessions are unaffected. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds. Events are logged to `%APPDATA%\Claude Widget\workers.jsonl`, which is cleared on each session restart.
+Replace `<you>` with your Windows user name. The hook only acts inside the widget: it checks `CLAUDE_WIDGET_WORKERS`, which the widget sets for each of its sessions, so other Claude sessions are unaffected. The `Notification` entry drives the "needs you" dot. Only permission prompts and questions count (`notification_type` `permission_prompt` / `elicitation_dialog`), not the idle reminder after each turn. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds. Events are logged per session to `%APPDATA%\Claude Widget\sessions\<hash>\workers.jsonl`, which is cleared on each session restart.
 
 ### Status footer
 
@@ -93,7 +113,7 @@ Model, cost, context and limits come from Claude Code's status line JSON. Wrap y
 }
 ```
 
-Everything after the script path is your own status line command. With nothing after it, the wrapper prints nothing. Like the worker hook, it only saves inside the widget (`CLAUDE_WIDGET_STATUS`). The JSON goes to `%APPDATA%\Claude Widget\status.json`, which is cleared on each session restart.
+Everything after the script path is your own status line command. With nothing after it, the wrapper prints nothing. Like the worker hook, it only saves inside the widget (`CLAUDE_WIDGET_STATUS`). The JSON goes per session to `%APPDATA%\Claude Widget\sessions\<hash>\status.json`, which is cleared on each session restart. The footer shows the active project.
 
 ### Markdown popouts
 
@@ -123,9 +143,12 @@ Notes:
 ## Repo layout
 
 ```
-src/main.js            Electron main process: window, tray, hotkey, PTY, settings
+src/main.js            Electron main process: window, tray, hotkey, project list, settings
+src/sessions.js        One PTY + worker log + status file per open project
+src/projects.js        Builds the project list (scan + pinned - hidden) and initials
+src/session-state.js   Reducer: per-session signals -> project dot (renderer + tests)
 src/preload.js         Bridge exposed to the renderer as window.widget
-src/renderer/          Terminal UI (xterm.js), title bar, worker rows, styles
+src/renderer/          UI: terminals.js (one xterm per session), rail.js (project list), renderer.js (glue)
 src/workers.js         Reducer: hook events -> worker rows (renderer + tests)
 src/log-tail.js        Tails the hook event log for the main process
 src/footer.js          Status footer formatting (renderer + tests)

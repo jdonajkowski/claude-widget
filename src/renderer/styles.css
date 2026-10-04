@@ -223,3 +223,105 @@ body.exited .dot { background: var(--muted); }
 
 .xterm-viewport::-webkit-scrollbar { width: 8px; }
 .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
+
+/* Project rail, left of the terminal. Its width is added to the window (main.js), so the terminal keeps its size. */
+:root { --rail-w: 170px; }
+#rail {
+  flex: 0 0 var(--rail-w);
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--bar);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  font: 12px/22px 'Segoe UI', system-ui, sans-serif;
+  color: #e8e6e3;
+}
+#rail-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 4px 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+#rail-head .title {
+  font: 600 10px/14px 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+#rail-add, #btn-rail {
+  margin-left: auto;
+  width: 22px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+#rail-add:hover, #btn-rail:hover { background: rgba(255, 255, 255, 0.08); color: #e8e6e3; }
+#btn-rail { margin: 0 0 0 -6px; font-size: 12px; }
+#rail-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0; }
+#rail-list::-webkit-scrollbar { width: 6px; }
+#rail-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+.proj {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--muted);
+}
+.proj:hover { background: rgba(255, 255, 255, 0.05); color: #e8e6e3; }
+.proj.running { color: #e8e6e3; }
+.proj.active { background: rgba(217, 119, 87, 0.16); color: #fff; }
+.proj.missing { opacity: 0.45; cursor: default; }
+.proj .pname { overflow: hidden; text-overflow: ellipsis; }
+.proj .pinit { display: none; font: 600 11px/22px 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.04em; }
+
+/* State dots: working (pulsing orange), needs you (amber half), finished while away (green check), idle (grey ring). */
+.pdot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid #5f5a55;
+}
+.pdot.working { border: 0; background: var(--accent); animation: dot-pulse 1.2s ease-in-out infinite; }
+.pdot.attention { border: 1.5px solid #d4a72c; background: linear-gradient(90deg, #d4a72c 50%, transparent 50%); }
+.pdot.finished { border: 0; color: #57ab5a; font-size: 10px; line-height: 8px; }
+.pdot.finished::before { content: '✓'; }
+@keyframes dot-pulse { 50% { opacity: 0.35; } }
+
+/* Collapsed rail: two-letter initials with the dot in the corner. */
+body.rail-collapsed #rail-head .title { display: none; }
+body.rail-collapsed #rail-head { justify-content: center; padding: 4px 0; }
+body.rail-collapsed #rail-add { margin: 0; }
+body.rail-collapsed .proj { justify-content: center; margin: 0 3px; padding: 0; }
+body.rail-collapsed .proj .pname { display: none; }
+body.rail-collapsed .proj .pinit { display: block; }
+body.rail-collapsed .proj .pdot { position: absolute; top: 2px; right: 1px; width: 7px; height: 7px; flex-basis: 7px; }
+
+#terminal { position: relative; }
+.term-pane { height: 100%; }
+.term-pane[hidden], #placeholder[hidden] { display: none; }
+#placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}

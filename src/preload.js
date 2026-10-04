@@ -6,15 +6,30 @@ const on = (channel) => (cb) => {
   return () => ipcRenderer.removeListener(channel, listener);
 };
 
+// Every PTY, worker and status message carries the session (project) id.
 contextBridge.exposeInMainWorld('widget', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   pty: {
-    start: (cols, rows) => ipcRenderer.send('pty:start', { cols, rows }),
-    write: (data) => ipcRenderer.send('pty:input', data),
-    resize: (cols, rows) => ipcRenderer.send('pty:resize', { cols, rows }),
+    write: (id, data) => ipcRenderer.send('pty:input', { id, data }),
+    resize: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
+    restart: (id, cols, rows) => ipcRenderer.send('pty:restart', { id, cols, rows }),
     onData: on('pty:data'),
     onExit: on('pty:exit'),
-    onRestart: on('pty:restart')
+    onRestartActive: on('pty:restartActive')
+  },
+  projects: {
+    get: () => ipcRenderer.invoke('projects:get'),
+    open: (id, cols, rows) => ipcRenderer.invoke('project:open', { id, cols, rows }),
+    close: (id) => ipcRenderer.send('session:close', { id }),
+    menu: (id) => ipcRenderer.send('project:menu', { id }),
+    addMenu: () => ipcRenderer.send('projects:addMenu'),
+    onList: on('projects:list'),
+    onClosed: on('session:closed'),
+    onSelect: on('projects:select')
+  },
+  rail: {
+    toggle: () => ipcRenderer.send('rail:toggle'),
+    onState: on('rail:state')
   },
   win: {
     togglePin: () => ipcRenderer.invoke('win:togglePin'),
@@ -39,9 +54,10 @@ contextBridge.exposeInMainWorld('widget', {
     onGit: on('git:update')
   },
   md: {
-    resolve: (candidates) => ipcRenderer.invoke('md:resolve', candidates),
-    open: (file) => ipcRenderer.send('md:open', file)
+    resolve: (candidates, id) => ipcRenderer.invoke('md:resolve', { candidates, id }),
+    open: (file, id) => ipcRenderer.send('md:open', { file, id })
   },
+  onToast: on('toast'),
   openConfig: () => ipcRenderer.send('app:openConfig'),
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url)
 });

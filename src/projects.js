@@ -33,6 +33,7 @@ function buildList({ scanned, pinned, hidden, exists, isWin = process.platform =
       id,
       path: full,
       name: pp.basename(full) || full,
+      initials: initials(pp.basename(full) || full),
       pinned: isPinned,
       missing: isPinned && !exists(full)
     });
