@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
+const { createLogTail } = require('./log-tail');
 
 const isWin = process.platform === 'win32';
 
@@ -35,6 +36,8 @@ const DEFAULT_CONFIG = {
 const userDir = app.getPath('userData');
 const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
+// Hook event log for the worker rows (written by hooks/workers-hook.js, see README).
+const workersLogPath = path.join(userDir, 'workers.jsonl');
 
 function readJson(file, fallback) {
   try {
@@ -68,6 +71,7 @@ let state = readJson(statePath, {});
 let win = null;
 let tray = null;
 let term = null;
+const workersTail = createLogTail(workersLogPath, (events) => send('workers:events', events));
 
 function defaultBounds() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -150,6 +154,7 @@ function toggleWindow() {
 // ---------------------------------------------------------------------------
 function spawnTerminal(cols, rows) {
   killTerminal();
+  workersTail.reset();
   const cwd = fs.existsSync(config.cwd) ? config.cwd : os.homedir();
   try {
     term = pty.spawn(config.shell, config.shellArgs, {
@@ -157,7 +162,7 @@ function spawnTerminal(cols, rows) {
       cols: cols || 100,
       rows: rows || 30,
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env },
+      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...config.env, CLAUDE_WIDGET_WORKERS: workersLogPath },
       useConpty: isWin ? true : undefined
     });
   } catch (err) {
@@ -271,6 +276,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     killTerminal();
+    workersTail.close();
   });
 
   // The tray keeps the app alive when the window is hidden; closing the

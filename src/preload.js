@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('widget', {
     read: () => ipcRenderer.invoke('clipboard:read'),
     write: (text) => ipcRenderer.send('clipboard:write', text)
   },
+  workers: {
+    onEvents: on('workers:events')
+  },
   openConfig: () => ipcRenderer.send('app:openConfig'),
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url)
 });
