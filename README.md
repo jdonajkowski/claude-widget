@@ -11,6 +11,7 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 - Terminal progress bar: Claude Code's OSC 9;4 progress is drawn under the title bar and on the taskbar icon
 - Worker rows: a busy/done row per running subagent and background shell (needs the hooks below)
 - Status footer: model, cost, context use, 5-hour/7-day limits, git branch and changes, and a turn timer
+- The right panel (workers and status) collapses to a slim strip that still shows the running-worker count and a pulsing dot while a turn runs
 - Files pane: the folder button in the title bar shows a file tree of the active project. Markdown files open in the viewer, other files in their default app (scripts and programs are shown in Explorer instead of run)
 - Markdown popouts: click a `.md` path in the terminal to open it rendered in its own window (live-reloads on save). Paths relative to a subfolder, bare file names, a trailing period and OSC 8 hyperlinks all work
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
@@ -28,6 +29,7 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 | Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
 | Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
+| Collapse / expand the right panel | `Ctrl+Shift+W`, the › button in its header, or click the collapsed strip |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Maximize / restore | Title-bar □ button, or double-click the title bar |
 | Full screen | `F11` |

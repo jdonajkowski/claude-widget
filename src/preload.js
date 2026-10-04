@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('widget', {
     onClosed: on('session:closed'),
     onSelect: on('projects:select')
   },
+  side: {
+    setCollapsed: (collapsed) => ipcRenderer.send('side:setCollapsed', collapsed)
+  },
   rail: {
     toggle: () => ipcRenderer.send('rail:toggle'),
     onState: on('rail:state')

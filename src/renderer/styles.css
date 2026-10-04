@@ -405,3 +405,52 @@ body.rail-collapsed .proj .pdot { position: absolute; top: 2px; right: 1px; widt
 .frow .chev { flex: 0 0 10px; font-size: 9px; color: var(--muted); text-align: center; }
 .frow .fname { overflow: hidden; text-overflow: ellipsis; }
 .fempty { padding: 4px 10px; color: var(--muted); }
+
+/* Collapsible right panel: a › button in its header folds it to a strip; the strip unfolds it. */
+#side-toggle {
+  flex-shrink: 0;
+  width: 20px;
+  height: 18px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 16px;
+  cursor: pointer;
+}
+#side-toggle:hover { background: rgba(255, 255, 255, 0.08); color: #e8e6e3; }
+#side-mini { display: none; }
+body.side-collapsed #side { flex-basis: 24px; animation: none; }
+body.side-collapsed #side > :not(#side-mini) { display: none; }
+body.side-collapsed #side-mini {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  cursor: pointer;
+}
+body.side-collapsed #side-mini:hover { background: rgba(255, 255, 255, 0.04); }
+#side-mini .chev { font-size: 14px; line-height: 16px; color: var(--muted); }
+#side-mini:hover .chev { color: #e8e6e3; }
+#mini-count {
+  min-width: 16px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  font: 10px/16px 'Cascadia Mono', Consolas, monospace;
+  text-align: center;
+  color: var(--accent);
+  background: rgba(217, 119, 87, 0.12);
+}
+#mini-count:empty { display: none; }
+#mini-turn.busy {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}

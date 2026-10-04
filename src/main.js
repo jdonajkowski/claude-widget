@@ -604,8 +604,13 @@ ipcMain.handle('config:get', () => ({
   alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop,
   opacity: win ? win.getOpacity() : config.opacity,
   rail: { collapsed: !!state.railCollapsed, width: railWidth() },
-  filesOpen: !!state.filesOpen
+  filesOpen: !!state.filesOpen,
+  sideCollapsed: !!state.sideCollapsed
 }));
+ipcMain.on('side:setCollapsed', (_e, collapsed) => {
+  state.sideCollapsed = !!collapsed;
+  writeJson(statePath, state);
+});
 ipcMain.handle('win:togglePin', () => {
   const next = !win.isAlwaysOnTop();
   win.setAlwaysOnTop(next, 'floating');

@@ -197,6 +197,17 @@
   let workerCount = 0;
   const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden; };
 
+  // Collapsed, the panel is a slim strip with the running-worker count and a turn indicator.
+  let sideCollapsed = !!cfg.sideCollapsed;
+  const setSideCollapsed = (collapsed) => {
+    sideCollapsed = collapsed;
+    document.body.classList.toggle('side-collapsed', collapsed);
+    widget.side.setCollapsed(collapsed);
+  };
+  document.body.classList.toggle('side-collapsed', sideCollapsed);
+  $('side-toggle').onclick = () => { setSideCollapsed(true); terminals.focus(); };
+  $('side-mini').onclick = () => { setSideCollapsed(false); terminals.focus(); };
+
   const setLevel = (el, pct) => {
     el.classList.remove('warm', 'hot');
     const lv = WidgetFooter.level(pct);
@@ -232,6 +243,8 @@
     $('f-git').title = (s && s.cwd) || '';
     const turn = $('f-turn');
     turn.classList.toggle('busy', turnStart !== null);
+    $('mini-turn').classList.toggle('busy', turnStart !== null);
+    $('mini-turn').title = turn.textContent;
     turn.textContent = turnStart !== null ? `▶ ${WidgetFooter.fmtDuration(now - turnStart)}`
       : lastTurnMs !== null ? `last ${WidgetFooter.fmtDuration(lastTurnMs)}` : '';
     footerEl.hidden = !s && !git && turnStart === null && lastTurnMs === null;
@@ -306,6 +319,8 @@
     if (done) parts.push(`${done} done`);
     countEl.textContent = parts.join(' · ') || 'idle';
     countEl.classList.toggle('idle', running === 0);
+    $('mini-count').textContent = running ? String(running) : '';
+    $('mini-count').classList.toggle('idle', running === 0);
     workerCount = workers.length;
     updateSide();
   }
@@ -333,7 +348,7 @@
     fitTimer = setTimeout(() => terminals.fitActive(), 60);
   }).observe($('terminal'));
 
-  // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B, Ctrl+Shift+E ---
+  // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B, Ctrl+Shift+E, Ctrl+Shift+W ---
   // The rail toggle is Ctrl+Shift+B, not Ctrl+B: Claude Code uses Ctrl+B to background a running command.
   window.addEventListener('keydown', (e) => {
     const handled = () => { e.preventDefault(); e.stopPropagation(); };
@@ -350,6 +365,9 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'b') {
       handled();
       widget.rail.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'w') {
+      handled();
+      setSideCollapsed(!sideCollapsed);
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
