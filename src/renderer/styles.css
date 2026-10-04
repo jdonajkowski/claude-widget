@@ -80,6 +80,41 @@ body.transparent #frame { background: transparent; }
   animation: workers-in 0.15s ease-out;
 }
 #side[hidden] { display: none; }
+#workers-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+#workers-head .title {
+  font: 600 10px/14px 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e8e6e3;
+}
+#workers-head .title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 1px;
+  background: var(--accent);
+  vertical-align: -1px;
+}
+#workers-count {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 8px;
+  font: 10px/16px 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: rgba(217, 119, 87, 0.12);
+}
+#workers-count.idle { color: var(--muted); background: rgba(255, 255, 255, 0.05); }
 #workers { flex: 1; min-height: 0; padding: 6px 10px; overflow: hidden; }
 
 #footer { flex: 0 0 auto; padding: 5px 10px 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); }

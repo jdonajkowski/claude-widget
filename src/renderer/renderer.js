@@ -65,6 +65,7 @@
   // --- Side panel: worker rows on top, status footer at the bottom ------------
   const sideEl = document.getElementById('side');
   const workersEl = document.getElementById('workers');
+  const countEl = document.getElementById('workers-count');
   const footerEl = document.getElementById('footer');
   let workerCount = 0;
   const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden; };
@@ -185,6 +186,13 @@
     } else if (more) {
       more.remove();
     }
+    const running = workers.filter((w) => w.doneAt === null).length;
+    const done = workers.length - running;
+    const parts = [];
+    if (running) parts.push(`${running} running`);
+    if (done) parts.push(`${done} done`);
+    countEl.textContent = parts.join(' · ') || 'idle';
+    countEl.classList.toggle('idle', running === 0);
     workerCount = workers.length;
     updateSide();
     if (workers.length === 0 && workerTimer) { clearInterval(workerTimer); workerTimer = null; }
