@@ -1,0 +1,101 @@
+:root {
+  --bg: #1f1e1d;
+  --bar: rgba(255, 255, 255, 0.04);
+  --muted: #8a8580;
+  --accent: #d97757;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  user-select: none;
+}
+
+#frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+body.transparent #frame { background: transparent; }
+
+#bar {
+  flex: 0 0 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 10px;
+  background: var(--bar);
+  -webkit-app-region: drag;
+}
+
+#title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+body.exited .dot { background: var(--muted); }
+
+#controls {
+  display: flex;
+  gap: 2px;
+  opacity: 0.35;
+  transition: opacity 120ms;
+  -webkit-app-region: no-drag;
+}
+#bar:hover #controls { opacity: 1; }
+
+#controls button {
+  width: 24px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+#controls button:hover { background: rgba(255, 255, 255, 0.08); color: #e8e6e3; }
+#btn-close:hover { background: #c42b1c; color: #fff; }
+#btn-pin.on { color: var(--accent); }
+
+#terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 2px 2px 8px;
+}
+
+#toast {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #e8e6e3;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+#toast.show { opacity: 1; }
+
+.xterm-viewport::-webkit-scrollbar { width: 8px; }
+.xterm-viewport::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }

@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:">
+  <title>Claude Widget</title>
+  <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="frame">
+    <header id="bar">
+      <div id="title"><span class="dot"></span>Claude Code</div>
+      <div id="controls">
+        <button id="btn-restart" title="Restart session (Ctrl+Shift+R)">↻</button>
+        <button id="btn-fade" title="More transparent">−</button>
+        <button id="btn-solid" title="Less transparent">+</button>
+        <button id="btn-pin" title="Always on top">📌︎</button>
+        <button id="btn-settings" title="Edit settings">⚙︎</button>
+        <button id="btn-min" title="Hide to tray (Ctrl+Alt+Space toggles)">–</button>
+        <button id="btn-close" title="Quit">✕</button>
+      </div>
+      <div id="progress"></div>
+    </header>
+    <main id="terminal"></main>
+    <div id="toast"></div>
+  </div>
+  <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="../../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

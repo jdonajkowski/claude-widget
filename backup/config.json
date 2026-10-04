@@ -1,0 +1,26 @@
+{
+  "shell": "powershell.exe",
+  "shellArgs": [
+    "-NoLogo",
+    "-NoExit",
+    "-Command",
+    "claude.cmd"
+  ],
+  "cwd": "C:\\Users\\jacob\\Projects",
+  "env": {
+    "WT_SESSION": "1"
+  },
+  "alwaysOnTop": false,
+  "opacity": 0.95,
+  "backgroundMaterial": "none",
+  "showInTaskbar": true,
+  "hotkey": "Control+Alt+Space",
+  "fontFamily": "'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace",
+  "fontSize": 13,
+  "theme": {
+    "background": "#1f1e1d",
+    "foreground": "#e8e6e3",
+    "cursor": "#d97757",
+    "selectionBackground": "#d9775755"
+  }
+}
