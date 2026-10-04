@@ -17,11 +17,18 @@ function clip(text) {
 
 function snapshot(p, ts) {
   const tasks = Array.isArray(p.background_tasks) ? p.background_tasks : [];
-  return { t: 'snapshot', ids: tasks.map((x) => x && x.id).filter((id) => typeof id === 'string'), ts };
+  return { t: 'snapshot', ids: tasks.map((x) => x && x.id).filter((id) => typeof id === 'string'), ts, src: p.hook_event_name };
 }
 
+// Every claude started inside the widget inherits CLAUDE_WIDGET_WORKERS (e.g. a `claude -p` run from Bash),
+// so events carry the session id and the reducer only lets a session's snapshots finish its own workers.
 function toEvents(p, ts) {
   if (!p || typeof p !== 'object') return [];
+  const events = eventsFor(p, ts);
+  return typeof p.session_id === 'string' ? events.map((e) => ({ ...e, sid: p.session_id })) : events;
+}
+
+function eventsFor(p, ts) {
   switch (p.hook_event_name) {
     case 'SubagentStart':
       return p.agent_id ? [{ t: 'start', id: p.agent_id, kind: 'agent', label: clip(p.agent_type || 'agent'), ts }] : [];
@@ -41,11 +48,12 @@ function toEvents(p, ts) {
 
 function main() {
   const file = process.env.CLAUDE_WIDGET_WORKERS;
-  if (!file) return;
   let raw = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => (raw += d));
   process.stdin.on('end', () => {
+    // Outside the widget, stdin is still read to the end so Claude never writes into a closed pipe.
+    if (!file) return;
     try {
       const events = toEvents(JSON.parse(raw), Date.now());
       if (events.length) fs.appendFileSync(file, events.map((e) => JSON.stringify(e) + '\n').join(''));

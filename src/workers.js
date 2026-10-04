@@ -4,21 +4,24 @@
   const DONE_TTL_MS = 5000;
   // Worker kinds a snapshot may finish. Both are listed in background_tasks under their own id
   // (shell: backgroundTaskId, subagent: agent_id), checked against real payloads in Claude Code 2.1.289.
+  // Agents only on Stop snapshots: during a SubagentStop, a parallel foreground agent may not be listed.
   const SNAPSHOT_KINDS = ['shell', 'agent'];
+  const SUBAGENT_STOP_KINDS = ['shell'];
 
   function reduce(events, now) {
     const byId = new Map();
     for (const e of events) {
       if (!e || typeof e !== 'object' || typeof e.ts !== 'number') continue;
       if (e.t === 'start' && typeof e.id === 'string' && !byId.has(e.id)) {
-        byId.set(e.id, { id: e.id, kind: e.kind, label: String(e.label ?? e.id), startedAt: e.ts, doneAt: null });
+        byId.set(e.id, { id: e.id, kind: e.kind, label: String(e.label ?? e.id), startedAt: e.ts, doneAt: null, sid: e.sid });
       } else if (e.t === 'stop' && byId.has(e.id)) {
         const w = byId.get(e.id);
         if (w.doneAt === null) w.doneAt = e.ts;
       } else if (e.t === 'snapshot' && Array.isArray(e.ids)) {
         const live = new Set(e.ids);
+        const kinds = e.src === 'SubagentStop' ? SUBAGENT_STOP_KINDS : SNAPSHOT_KINDS;
         for (const w of byId.values()) {
-          if (w.doneAt === null && SNAPSHOT_KINDS.includes(w.kind) && w.startedAt < e.ts && !live.has(w.id)) {
+          if (w.doneAt === null && w.sid === e.sid && kinds.includes(w.kind) && w.startedAt < e.ts && !live.has(w.id)) {
             w.doneAt = e.ts;
           }
         }

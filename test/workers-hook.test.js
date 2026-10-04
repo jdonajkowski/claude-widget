@@ -18,11 +18,11 @@ test('SubagentStart -> start agent', () => {
 
 test('SubagentStop -> stop + snapshot', () => {
   const ev = toEvents({ hook_event_name: 'SubagentStop', agent_id: 'ag1', background_tasks: [{ id: 'b1', type: 'shell' }] }, 7);
-  assert.deepEqual(ev, [{ t: 'stop', id: 'ag1', ts: 7 }, { t: 'snapshot', ids: ['b1'], ts: 7 }]);
+  assert.deepEqual(ev, [{ t: 'stop', id: 'ag1', ts: 7 }, { t: 'snapshot', ids: ['b1'], ts: 7, src: 'SubagentStop' }]);
 });
 
 test('Stop -> snapshot (empty when no background_tasks)', () => {
-  assert.deepEqual(toEvents({ hook_event_name: 'Stop' }, 9), [{ t: 'snapshot', ids: [], ts: 9 }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'Stop' }, 9), [{ t: 'snapshot', ids: [], ts: 9, src: 'Stop' }]);
 });
 
 test('PostToolUse background Bash -> start shell with clipped one-line label', () => {
@@ -94,4 +94,19 @@ test('concurrent hooks write intact lines', async () => {
   })));
   const ids = readLines(log).map((e) => e.id).sort();
   assert.deepEqual(ids, Array.from({ length: N }, (_, i) => `ag${i}`).sort());
+});
+
+test('events carry the session id, and snapshots their source hook', () => {
+  assert.deepEqual(toEvents({ hook_event_name: 'SubagentStart', session_id: 'S1', agent_id: 'ag1', agent_type: 'Explore' }, 5),
+    [{ t: 'start', id: 'ag1', kind: 'agent', label: 'Explore', ts: 5, sid: 'S1' }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'Stop', session_id: 'S1' }, 9), [{ t: 'snapshot', ids: [], ts: 9, src: 'Stop', sid: 'S1' }]);
+});
+
+test('script outside the widget still consumes a large stdin cleanly', () => {
+  const env = { ...process.env };
+  delete env.CLAUDE_WIDGET_WORKERS;
+  const big = JSON.stringify({ hook_event_name: 'PostToolUse', tool_response: { stdout: 'x'.repeat(4 * 1024 * 1024) } });
+  const r = spawnSync(process.execPath, [HOOK], { input: big, env, encoding: 'utf8' });
+  assert.equal(r.error, undefined);
+  assert.equal(r.status, 0);
 });

@@ -6,7 +6,7 @@ const start = (id, kind, ts, label = id) => ({ t: 'start', id, kind, label, ts }
 
 test('start creates a running worker', () => {
   const w = reduce([start('a1', 'agent', 1000, 'Explore')], 2000);
-  assert.deepEqual(w, [{ id: 'a1', kind: 'agent', label: 'Explore', startedAt: 1000, doneAt: null }]);
+  assert.deepEqual(w, [{ id: 'a1', kind: 'agent', label: 'Explore', startedAt: 1000, doneAt: null, sid: undefined }]);
 });
 
 test('stop marks the worker done', () => {
@@ -68,4 +68,21 @@ test('malformed events are skipped', () => {
 test('workers are ordered by start time', () => {
   const ev = [start('b', 'shell', 2000), start('a', 'agent', 1000)];
   assert.deepEqual(reduce(ev, 3000).map((w) => w.id), ['a', 'b']);
+});
+
+test('snapshot from another session does not finish workers', () => {
+  const ev = [{ ...start('s1', 'shell', 1000), sid: 'outer' }, { t: 'snapshot', ids: [], ts: 2000, sid: 'nested', src: 'Stop' }];
+  assert.equal(reduce(ev, 2000)[0].doneAt, null);
+});
+
+test('snapshot from the same session still finishes workers', () => {
+  const ev = [{ ...start('s1', 'shell', 1000), sid: 'outer' }, { t: 'snapshot', ids: [], ts: 2000, sid: 'outer', src: 'Stop' }];
+  assert.equal(reduce(ev, 2000)[0].doneAt, 2000);
+});
+
+test('SubagentStop snapshot finishes shells but not agents', () => {
+  const ev = [start('s1', 'shell', 1000), start('a1', 'agent', 1000), { t: 'snapshot', ids: [], ts: 2000, src: 'SubagentStop' }];
+  const w = reduce(ev, 2000);
+  assert.equal(w.find((x) => x.id === 's1').doneAt, 2000);
+  assert.equal(w.find((x) => x.id === 'a1').doneAt, null);
 });
