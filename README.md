@@ -16,7 +16,7 @@ or download and install by hand:
 
 ```sh
 gh release download -R jdonajkowski/claude-widget -p '*.pacman'    # Arch and Arch-based
-sudo pacman -U claude-widget-*.pacman
+sudo pacman -U claude-desktop-widget-*.pacman
 
 gh release download -R jdonajkowski/claude-widget -p '*.AppImage'  # any distro (needs FUSE 2)
 chmod +x Claude*.AppImage && ./Claude*.AppImage
