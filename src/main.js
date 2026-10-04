@@ -7,6 +7,7 @@ const { createSessions } = require('./sessions');
 const projects = require('./projects');
 const gitStatus = require('./git-status');
 const { summarize } = require('./footer');
+const files = require('./files');
 
 const isWin = process.platform === 'win32';
 
@@ -497,19 +498,39 @@ function openMd(file) {
   md.loadFile(path.join(__dirname, 'md', 'md.html'));
 }
 
+// Markdown files of a project, for paths Claude prints relative to a subfolder or as a bare name.
+// Cached briefly: the link provider asks once per hovered row.
+const mdIndex = new Map();
+function projectMdFiles(root) {
+  const hit = mdIndex.get(root);
+  if (hit && Date.now() - hit.at < 5000) return hit.files;
+  const entry = { at: Date.now(), files: files.mdFiles(root) };
+  mdIndex.set(root, entry);
+  return entry.files;
+}
+
+// A printed path as-is (relative to the session's folder), else the project file it is the tail of.
+function findMd(p, id) {
+  const from = baseCwd(id);
+  const direct = resolveMd(p, from);
+  if (direct) return direct;
+  const root = projectPath(id);
+  if (!root) return null;
+  const rel = files.findByTail(projectMdFiles(root), p, isWin);
+  return rel ? resolveMd(rel, root) : null;
+}
+
 // Candidates come from md-links.js, longest first; the first one that is an existing file wins.
-// Relative paths resolve against the folder of the session that printed them.
 ipcMain.handle('md:resolve', (_e, { candidates, id }) => {
   if (!Array.isArray(candidates)) return null;
-  const from = baseCwd(id);
   for (let i = 0; i < candidates.length && i < 16; i++) {
-    const file = resolveMd(candidates[i], from);
+    const file = findMd(candidates[i], id);
     if (file) return { index: i, file };
   }
   return null;
 });
 ipcMain.on('md:open', (_e, { file: p, id }) => {
-  const file = resolveMd(p, baseCwd(id));
+  const file = findMd(p, id);
   if (file) openMd(file);
 });
 // Links inside a popout: web links go to the browser, other Markdown files open in their own popout.
@@ -522,6 +543,57 @@ ipcMain.on('md:link', (_e, { href, from }) => {
 });
 
 // ---------------------------------------------------------------------------
+// Files pane: browse the active project's folder
+// ---------------------------------------------------------------------------
+function projectPath(id) {
+  if (!id) return null;
+  const p = projectList.find((x) => x.id === id);
+  return (p && !p.missing && p.path) || (sessions.has(id) ? sessions.cwd(id) : null);
+}
+
+ipcMain.on('files:setOpen', (_e, open) => {
+  state.filesOpen = !!open;
+  writeJson(statePath, state);
+});
+
+ipcMain.handle('files:list', (_e, { id, rel }) => {
+  const root = projectPath(id);
+  if (!root) return null;
+  return { root, entries: files.listDir(root, rel) };
+});
+
+function fileTarget(id, rel) {
+  const root = projectPath(id);
+  return root ? files.safeJoin(root, rel) : null;
+}
+
+// Click: Markdown opens in the viewer, runnable files are shown in Explorer, the rest open in their default app.
+ipcMain.on('files:open', (_e, { id, rel }) => {
+  const file = fileTarget(id, rel);
+  if (!file || !fs.existsSync(file)) return;
+  const action = files.openAction(file);
+  if (action === 'md') openMd(file);
+  else if (action === 'reveal') shell.showItemInFolder(file);
+  else shell.openPath(file);
+});
+
+ipcMain.on('files:menu', (_e, { id, rel, dir }) => {
+  const file = fileTarget(id, rel);
+  if (!file || !win) return;
+  const items = [];
+  if (!dir && files.openAction(file) === 'md') items.push({ label: 'Open in viewer', click: () => openMd(file) });
+  if (!dir && files.openAction(file) === 'open') items.push({ label: 'Open', click: () => shell.openPath(file) });
+  if (dir) items.push({ label: 'Open in Explorer', click: () => shell.openPath(file) });
+  else items.push({ label: 'Show in Explorer', click: () => shell.showItemInFolder(file) });
+  items.push(
+    { type: 'separator' },
+    { label: 'Copy path', click: () => clipboard.writeText(file) },
+    { label: 'Copy relative path', click: () => clipboard.writeText(String(rel).replace(/\//g, path.sep)) }
+  );
+  Menu.buildFromTemplate(items).popup({ window: win });
+});
+
+// ---------------------------------------------------------------------------
 // Window controls from the renderer
 // ---------------------------------------------------------------------------
 ipcMain.handle('config:get', () => ({
@@ -531,7 +603,8 @@ ipcMain.handle('config:get', () => ({
   transparent: isWin && config.backgroundMaterial !== 'none',
   alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop,
   opacity: win ? win.getOpacity() : config.opacity,
-  rail: { collapsed: !!state.railCollapsed, width: railWidth() }
+  rail: { collapsed: !!state.railCollapsed, width: railWidth() },
+  filesOpen: !!state.filesOpen
 }));
 ipcMain.handle('win:togglePin', () => {
   const next = !win.isAlwaysOnTop();

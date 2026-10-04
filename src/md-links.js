@@ -4,7 +4,8 @@
 (function (root) {
   const MAX_CANDIDATES = 8;
   // A path ends at .md/.markdown, optionally followed by :line or :line:col, before a non-word character.
-  const END = /\.(?:md|markdown)(?::\d+(?::\d+)?)?(?![\w\\/.-]|\.\w)/gi;
+  // A trailing period ends a sentence ("see README.md."); a period plus a letter (foo.md.bak) does not.
+  const END = /\.(?:md|markdown)(?::\d+(?::\d+)?)?(?![\w\\/-]|\.\w)/gi;
   // Characters that can never be part of a path we link.
   const STOP = /["'`<>|*?\u2018\u2019\u201c\u201d\[\](){}]/;
 

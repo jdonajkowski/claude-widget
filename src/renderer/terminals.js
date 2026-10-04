@@ -21,12 +21,15 @@
         allowTransparency: cfg.transparent,
         scrollback: 10000,
         theme: cfg.transparent ? { ...cfg.theme, background: '#00000000' } : cfg.theme,
-        // OSC 8 hyperlinks: Markdown files open in a popout, web links in the browser.
+        // OSC 8 hyperlinks: Markdown files (file: URIs or plain paths) open in a popout, web links in the browser.
         linkHandler: {
           allowNonHttpProtocols: true,
           activate: (_e, uri) => {
-            if (/^file:/i.test(uri) && /\.(md|markdown)$/i.test(uri.split(/[?#]/)[0])) widget.md.open(uri, id);
-            else if (/^https?:\/\//i.test(uri)) widget.openExternal(uri);
+            if (/^https?:\/\//i.test(uri)) return widget.openExternal(uri);
+            // A scheme has 2+ letters, so a drive letter (C:\…) counts as a plain path.
+            const target = uri.split(/[?#]/)[0].replace(/(?::\d+)+$/, '');
+            const local = /^file:/i.test(target) || !/^[a-z][\w+.-]+:/i.test(target);
+            if (local && /\.(md|markdown)$/i.test(target)) widget.md.open(target, id);
           }
         }
       });

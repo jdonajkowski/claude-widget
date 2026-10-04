@@ -57,6 +57,12 @@ contextBridge.exposeInMainWorld('widget', {
     resolve: (candidates, id) => ipcRenderer.invoke('md:resolve', { candidates, id }),
     open: (file, id) => ipcRenderer.send('md:open', { file, id })
   },
+  files: {
+    setOpen: (open) => ipcRenderer.send('files:setOpen', open),
+    list: (id, rel) => ipcRenderer.invoke('files:list', { id, rel }),
+    open: (id, rel) => ipcRenderer.send('files:open', { id, rel }),
+    menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir })
+  },
   onToast: on('toast'),
   openConfig: () => ipcRenderer.send('app:openConfig'),
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url)

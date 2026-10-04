@@ -11,7 +11,7 @@
 <body>
   <div id="frame">
     <header id="bar">
-      <div id="title"><button id="btn-rail" title="Toggle project list (Ctrl+Shift+B)">☰</button><span class="dot"></span><span id="title-text">Claude Code</span></div>
+      <div id="title"><button id="btn-rail" title="Toggle project list (Ctrl+Shift+B)">☰</button><button id="btn-files" title="Toggle files (Ctrl+Shift+E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5a1 1 0 0 1 1-1h3.1l1.5 1.6H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg></button><span class="dot"></span><span id="title-text">Claude Code</span></div>
       <div id="controls">
         <button id="btn-restart" title="Restart session (Ctrl+Shift+R)">↻</button>
         <button id="btn-fade" title="More transparent">−</button>
@@ -29,6 +29,10 @@
         <div id="rail-head"><span class="title">Projects</span><button id="rail-add" title="Add folder / show hidden">+</button></div>
         <div id="rail-list"></div>
       </nav>
+      <aside id="files" hidden>
+        <div id="files-head"><span class="title">Files</span><button id="files-refresh" title="Refresh">↻</button></div>
+        <div id="files-list"></div>
+      </aside>
       <main id="terminal"><div id="placeholder" hidden></div></main>
       <aside id="side" hidden>
         <div id="workers-head"><span class="title">Workers</span><span id="workers-count" class="idle">idle</span></div>
@@ -52,6 +56,7 @@
   <script src="../session-state.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>
+  <script src="files-pane.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

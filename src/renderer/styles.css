@@ -325,3 +325,83 @@ body.rail-collapsed .proj .pdot { position: absolute; top: 2px; right: 1px; widt
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Files pane button: a folder outline in the accent color. */
+#btn-files {
+  width: 22px;
+  height: 20px;
+  margin: 0 0 0 -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+#btn-files svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-linejoin: round; }
+#btn-files:hover, #btn-files.on { background: rgba(217, 119, 87, 0.16); }
+
+/* Files pane, between the project rail and the terminal. Unlike the rail it takes its width from the terminal. */
+#files {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--bar);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  font: 12px/20px 'Segoe UI', system-ui, sans-serif;
+  color: #e8e6e3;
+}
+#files[hidden] { display: none; }
+#files-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 4px 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+#files-head .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 10px/14px 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+#files-refresh {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 22px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+#files-refresh:hover { background: rgba(255, 255, 255, 0.08); color: #e8e6e3; }
+#files-list { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
+#files-list::-webkit-scrollbar { width: 6px; height: 6px; }
+#files-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+.frow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+  padding-right: 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--muted);
+}
+.frow:hover { background: rgba(255, 255, 255, 0.05); color: #e8e6e3; }
+.frow.dir { color: #e8e6e3; }
+.frow .chev { flex: 0 0 10px; font-size: 9px; color: var(--muted); text-align: center; }
+.frow .fname { overflow: hidden; text-overflow: ellipsis; }
+.fempty { padding: 4px 10px; color: var(--muted); }

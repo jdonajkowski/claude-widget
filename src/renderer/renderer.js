@@ -1,4 +1,4 @@
-/* global WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail */
+/* global WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -47,8 +47,11 @@
     onProgress: (id, state, value) => {
       const s = sess(id);
       s.progress = { state, value };
+      const ended = state === 0 && s.turnStart !== null;
       trackTurn(s, state);
       update(id, { t: 'progress', state });
+      // Claude may have added or removed files during the turn.
+      if (ended && id === activeId) filesPane.refresh();
       if (id === activeId) { renderProgress(); renderFooter(); }
       renderTaskbar();
     }
@@ -82,6 +85,10 @@
   rail.setCollapsed(cfg.rail.collapsed, cfg.rail.width);
   widget.rail.onState(({ collapsed, width }) => rail.setCollapsed(collapsed, width));
   $('btn-rail').onclick = () => widget.rail.toggle();
+
+  // --- Files pane ---------------------------------------------------------
+  const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
+  $('btn-files').onclick = () => { filesPane.toggle(); terminals.focus(); };
 
   function renderRail() {
     rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state) });
@@ -144,6 +151,7 @@
     const p = projects.find((x) => x.id === activeId);
     $('title-text').textContent = p ? p.name : 'Claude Code';
     $('title').title = p ? p.path : '';
+    filesPane.setProject(activeId);
     const t = activeId && terminals.get(activeId);
     document.body.classList.toggle('exited', !t || t.exited);
     rowEls.forEach((el) => el.remove());
@@ -325,7 +333,7 @@
     fitTimer = setTimeout(() => terminals.fitActive(), 60);
   }).observe($('terminal'));
 
-  // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B ---
+  // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B, Ctrl+Shift+E ---
   // The rail toggle is Ctrl+Shift+B, not Ctrl+B: Claude Code uses Ctrl+B to background a running command.
   window.addEventListener('keydown', (e) => {
     const handled = () => { e.preventDefault(); e.stopPropagation(); };
@@ -342,6 +350,9 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'b') {
       handled();
       widget.rail.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
+      handled();
+      filesPane.toggle();
     } else if (e.key === 'Enter' && !placeholderEl.hidden && activeId && !terminals.has(activeId)) {
       handled();
       activate(activeId);
@@ -371,7 +382,7 @@
     maxBtn.title = fullScreen ? 'Exit full screen (F11)' : maximized ? 'Restore' : 'Maximize (F11 for full screen)';
   });
 
-  window.addEventListener('focus', () => terminals.focus());
+  window.addEventListener('focus', () => { terminals.focus(); filesPane.refresh(); });
 
   // --- Launch: open the last active project; every other one stays idle until clicked ---
   const initial = await widget.projects.get();

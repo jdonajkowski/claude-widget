@@ -11,7 +11,8 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 - Terminal progress bar: Claude Code's OSC 9;4 progress is drawn under the title bar and on the taskbar icon
 - Worker rows: a busy/done row per running subagent and background shell (needs the hooks below)
 - Status footer: model, cost, context use, 5-hour/7-day limits, git branch and changes, and a turn timer
-- Markdown popouts: click a `.md` path in the terminal to open it rendered in its own window (live-reloads on save)
+- Files pane: the folder button in the title bar shows a file tree of the active project. Markdown files open in the viewer, other files in their default app (scripts and programs are shown in Explorer instead of run)
+- Markdown popouts: click a `.md` path in the terminal to open it rendered in its own window (live-reloads on save). Paths relative to a subfolder, bare file names, a trailing period and OSC 8 hyperlinks all work
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
 
 ## Keyboard and mouse
@@ -26,11 +27,13 @@ A borderless, always-on-top desktop widget that hosts a [Claude Code](https://cl
 | Open the Nth project in the list | `Ctrl+1` … `Ctrl+9` |
 | Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
+| Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Maximize / restore | Title-bar □ button, or double-click the title bar |
 | Full screen | `F11` |
 | Right-click | Copy selection, or paste if nothing is selected |
 | Click a `.md` path | Open it rendered in a popout (`Esc` closes the popout) |
+| Right-click a file in the files pane | Open, show in Explorer, copy path or relative path |
 
 Title-bar buttons: restart, more/less transparent, pin on top, settings, maximize, hide to tray, quit. Leaving maximized or full screen returns the window to its previous size, and a restart reopens it maximized if it was maximized when you quit.
 

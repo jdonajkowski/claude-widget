@@ -31,3 +31,7 @@ test('ignores look-alikes', () => {
 test('finds several paths on one line', () => {
   assert.deepEqual(find('a.md, b/c.MARKDOWN').map((m) => m.candidates.at(-1).path), ['a.md', 'b/c.MARKDOWN']);
 });
+
+test('a path at the end of a sentence still links', () => {
+  assert.deepEqual(paths('Saved it to docs/USAGE.md.'), [['Saved it to docs/USAGE.md', 'it to docs/USAGE.md', 'to docs/USAGE.md', 'docs/USAGE.md']]);
+});
