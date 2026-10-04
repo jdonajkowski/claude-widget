@@ -4,7 +4,7 @@ A borderless, always-on-top desktop widget that hosts [Claude Code](https://clau
 
 ## Install
 
-**Windows:** download `Claude.Widget.Setup.<version>.exe` from the [latest release](https://github.com/jdonajkowski/claude-widget/releases/latest) and run it. It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
+**Windows:** download and run [**Claude-Widget-Setup.exe**](https://github.com/jdonajkowski/claude-widget/releases/latest/download/Claude-Widget-Setup.exe) (always the latest release; older versions are on the [releases page](https://github.com/jdonajkowski/claude-widget/releases)). It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
 
 **Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. This one-liner picks the right file and installs it (no GitHub account needed):
 
@@ -137,7 +137,7 @@ Requires Node.js 20+ (tested with 24 / npm 11).
 npm install         # Electron downloads on first run
 npm start           # run from source
 npm test            # unit tests
-npm run dist        # Windows installer: dist/Claude Widget Setup <version>.exe
+npm run dist        # Windows installer: dist/Claude-Widget-Setup.exe
 ```
 
 **Linux packages** (Arch `.pacman` and an AppImage) have to be built on Linux, because `node-pty` is compiled there. On Linux or in WSL, after the one-time package install listed at the top of the script:

@@ -47,7 +47,8 @@
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "Claude-Widget-Setup.${ext}"
     },
     "linux": {
       "target": [
