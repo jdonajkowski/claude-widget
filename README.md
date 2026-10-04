@@ -56,7 +56,7 @@ Do not set `WT_SESSION`; it disables the bar.
 
 ### Worker rows
 
-The widget shows a row for each running subagent and background shell, between the title bar and the terminal. Claude Code reports these through hooks, so add this to `~/.claude/settings.json`. Merge it into any existing `hooks`, and keep your other `Stop` hooks by adding this one to the same `hooks` array.
+The widget shows a row for each running subagent and background shell, in a side panel to the right of the terminal. The panel opens when the first worker starts and closes once every row has faded. Claude Code reports these through hooks, so add this to `~/.claude/settings.json`. Merge it into any existing `hooks`, and keep your other `Stop` hooks by adding this one to the same `hooks` array.
 
 ```json
 "hooks": {

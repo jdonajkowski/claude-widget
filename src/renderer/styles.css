@@ -60,16 +60,26 @@ body.transparent #frame { background: transparent; }
   to { left: 100%; }
 }
 
-/* Worker rows (subagents and background shells), between the title bar and the terminal. */
+#body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Worker rows (subagents and background shells), in a side panel right of the terminal. */
 #workers {
-  flex: 0 0 auto;
-  padding: 3px 10px 4px;
+  flex: 0 0 190px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  overflow: hidden;
   background: var(--bar);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font: 11px/16px 'Cascadia Mono', Consolas, monospace;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  font: 11px/18px 'Cascadia Mono', Consolas, monospace;
   color: var(--muted);
+  animation: workers-in 0.15s ease-out;
 }
 #workers[hidden] { display: none; }
+@keyframes workers-in { from { opacity: 0; transform: translateX(12px); } }
 .worker { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .worker .label { overflow: hidden; text-overflow: ellipsis; color: #e8e6e3; }
 .worker .time { margin-left: auto; font-variant-numeric: tabular-nums; }
@@ -133,6 +143,7 @@ body.exited .dot { background: var(--muted); }
 
 #terminal {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   padding: 6px 2px 2px 8px;
 }

@@ -55,7 +55,7 @@
 
   // --- Worker rows (subagents + background shells, fed by hooks/workers-hook.js) ---
   const workersEl = document.getElementById('workers');
-  const MAX_ROWS = 4;
+  const MAX_ROWS = 20;
   let workerEvents = [];
   let workerTimer = null;
   const rowEls = new Map();
@@ -139,8 +139,13 @@
   });
   term.onResize(({ cols, rows }) => widget.pty.resize(cols, rows));
 
+  // Debounced so a burst of size changes (window drag, worker panel opening) resizes the PTY once.
+  let fitTimer;
   new ResizeObserver(() => {
-    try { fit.fit(); } catch { /* not visible yet */ }
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => {
+      try { fit.fit(); } catch { /* not visible yet */ }
+    }, 60);
   }).observe(document.getElementById('terminal'));
 
   // --- Keyboard: copy/paste, newline, restart -----------------------------
