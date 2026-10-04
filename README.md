@@ -53,15 +53,23 @@ Claude Code may only emit progress sequences for terminals it recognises. If the
 
 ## Running from source
 
-Requires Node.js and Claude Code (`claude` on your `PATH`).
+Requires Node.js (tested with 24 / npm 11) and Claude Code (`claude` on your `PATH`).
 
 ```sh
-npm install
-npm install --save-dev electron
-npx electron .
+npm install      # Electron itself downloads on first run
+npm start        # run the widget from source
+npm run pack     # unpacked build in dist/win-unpacked
+npm run dist     # installer: dist/Claude Widget Setup <version>.exe
 ```
 
-`node-pty` is a native module, so it must be built against Electron's Node version (for example with `@electron/rebuild`), and on Windows this needs the Visual Studio C++ build tools. The repo does not yet include packaging config; the installed app lives in `%LOCALAPPDATA%\Programs\Claude Widget`.
+The installer is a one-click, per-user NSIS setup that installs to `%LOCALAPPDATA%\Programs\Claude Widget` and replaces an existing install. Your settings in `%APPDATA%\Claude Widget` are kept.
+
+Notes:
+
+- No C++ toolchain is needed: `node-pty` ships N-API prebuilds that load in Electron as-is, so the build skips native rebuilds (`npmRebuild: false`).
+- npm 11 blocks dependency install scripts by default; `node-pty`'s (which checks the prebuilds and copies `conpty.dll`) is approved in `allowScripts` in `package.json`.
+- The widget only allows one instance, so `npm start` just focuses the widget if it's already running. Quit it first.
+- `asar` is off, matching the original install layout, so `node-pty`'s binaries load from disk.
 
 ## Repo layout
 
