@@ -6,23 +6,13 @@ A borderless, always-on-top desktop widget that hosts [Claude Code](https://clau
 
 **Windows:** run `Claude Widget Setup <version>.exe`. It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
 
-**Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. The repo is private, so sign in with the GitHub CLI first (`gh auth login`), then either run the install script, which picks the right file and installs it:
+**Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. This one-liner picks the right file and installs it (no GitHub account needed):
 
 ```sh
-gh api repos/jdonajkowski/claude-widget/contents/scripts/install-linux.sh -H 'Accept: application/vnd.github.raw' | bash
+curl -fsSL https://raw.githubusercontent.com/jdonajkowski/claude-widget/main/scripts/install-linux.sh | bash
 ```
 
-or download and install by hand:
-
-```sh
-gh release download -R jdonajkowski/claude-widget -p '*.pacman'    # Arch and Arch-based
-sudo pacman -U claude-desktop-widget-*.pacman
-
-gh release download -R jdonajkowski/claude-widget -p '*.AppImage'  # any distro (needs FUSE 2)
-chmod +x Claude*.AppImage && ./Claude*.AppImage
-```
-
-The package installs to `/opt/Claude Widget` with a menu entry. The script puts the AppImage in `~/.local/bin` with a menu entry. To update, run the same commands again. Add a version (`bash -s v0.3.0` for the script, `gh release download v0.3.0 …`) to get a specific release.
+On Arch and Arch-based distros it installs the package to `/opt/Claude Widget` with a menu entry (it asks for your sudo password). Elsewhere it puts the AppImage in `~/.local/bin` with a menu entry; AppImages need FUSE 2 (`libfuse2` / `fuse2`). To update, run it again. Add `-s v0.3.0` after `bash` for a specific release. You can also download the files from the [releases page](https://github.com/jdonajkowski/claude-widget/releases) and run `sudo pacman -U claude-desktop-widget-<version>.pacman`.
 
 **First launch** opens **Settings → Setup**, which checks this machine and fixes what's missing:
 

@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Installs Claude Widget from the GitHub Releases on Linux.
+# Installs Claude Widget from the GitHub Releases on Linux. Needs only curl.
 #   Arch-based (pacman):  installs the .pacman package (asks for your sudo password)
 #   other distros:        puts the AppImage in ~/.local/bin and adds a menu entry
 #
-#   bash install-linux.sh           the latest release
-#   bash install-linux.sh v0.3.0    a specific one
-#
-# The repo is private, so downloads need the GitHub CLI signed in (gh auth login), or a token with
-# read access in GITHUB_TOKEN (then python3 or jq is used to read the release list).
+#   curl -fsSL https://raw.githubusercontent.com/jdonajkowski/claude-widget/main/scripts/install-linux.sh | bash
+#   ... | bash -s v0.3.0     a specific release instead of the latest
 set -euo pipefail
 
 REPO="${CLAUDE_WIDGET_REPO:-jdonajkowski/claude-widget}"
@@ -17,28 +14,14 @@ trap 'rm -rf "$tmp"' EXIT
 
 if command -v pacman >/dev/null; then ext='.pacman'; else ext='.AppImage'; fi
 
-if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
-  gh release download ${TAG:+"$TAG"} --repo "$REPO" --pattern "*$ext" --dir "$tmp"
-elif [ -n "${GITHUB_TOKEN:-}" ]; then
-  if [ -n "$TAG" ]; then url="https://api.github.com/repos/$REPO/releases/tags/$TAG"; else url="https://api.github.com/repos/$REPO/releases/latest"; fi
-  json="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "$url")"
-  if command -v python3 >/dev/null; then
-    asset="$(printf '%s' "$json" | python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin)["assets"] if x["name"].endswith(sys.argv[1])]; print(a[0]["id"], a[0]["name"]) if a else None' "$ext")"
-  elif command -v jq >/dev/null; then
-    asset="$(printf '%s' "$json" | jq -r --arg e "$ext" '[.assets[] | select(.name | endswith($e))][0] | "\(.id) \(.name)"')"
-  else
-    echo "Needs python3 or jq to read the release list." >&2; exit 1
-  fi
-  [ -n "$asset" ] && [ "$asset" != "null null" ] || { echo "No $ext file in that release." >&2; exit 1; }
-  read -r id name <<<"$asset"
-  curl -fL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
-    -o "$tmp/$name" "https://api.github.com/repos/$REPO/releases/assets/$id"
-else
-  echo "$REPO is private: sign in with the GitHub CLI (gh auth login) or set GITHUB_TOKEN first." >&2
-  exit 1
-fi
+if [ -n "$TAG" ]; then api="https://api.github.com/repos/$REPO/releases/tags/$TAG"; else api="https://api.github.com/repos/$REPO/releases/latest"; fi
+url="$(curl -fsSL "$api" | grep -o "\"browser_download_url\": *\"[^\"]*${ext//./\\.}\"" | head -n 1 | sed 's/.*"\(https[^"]*\)"/\1/')"
+[ -n "$url" ] || { echo "No $ext file found in ${TAG:-the latest release} of $REPO." >&2; exit 1; }
 
-file="$(ls "$tmp"/*"$ext" | head -n 1)"
+file="$tmp/${url##*/}"
+echo "Downloading ${url##*/}…"
+curl -fL --progress-bar -o "$file" "$url"
+
 if [ "$ext" = '.pacman' ]; then
   sudo pacman -U "$file"
   echo "Installed. Start Claude Widget from your app menu."
