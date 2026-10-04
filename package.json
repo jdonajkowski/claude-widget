@@ -3,7 +3,10 @@
   "productName": "Claude Widget",
   "version": "0.3.0",
   "description": "Borderless desktop widget that hosts a Claude Code terminal session.",
-  "author": "Jacob Donajkowski",
+  "author": {
+    "name": "Jacob Donajkowski",
+    "email": "jdonajkowski83@gmail.com"
+  },
   "main": "src/main.js",
   "license": "MIT",
   "scripts": {
