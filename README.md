@@ -4,7 +4,7 @@ A borderless, always-on-top desktop widget that hosts [Claude Code](https://clau
 
 ## Install
 
-**Windows:** run `Claude Widget Setup <version>.exe`. It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
+**Windows:** download `Claude.Widget.Setup.<version>.exe` from the [latest release](https://github.com/jdonajkowski/claude-widget/releases/latest) and run it. It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
 
 **Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. This one-liner picks the right file and installs it (no GitHub account needed):
 
