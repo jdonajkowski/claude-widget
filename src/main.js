@@ -75,8 +75,8 @@ const workersTail = createLogTail(workersLogPath, (events) => send('workers:even
 
 function defaultBounds() {
   const { workArea } = screen.getPrimaryDisplay();
-  const width = 760;
-  const height = 480;
+  const width = 874;
+  const height = 552;
   return { width, height, x: workArea.x + workArea.width - width - 24, y: workArea.y + workArea.height - height - 24 };
 }
 

@@ -68,7 +68,7 @@ body.transparent #frame { background: transparent; }
 
 /* Worker rows (subagents and background shells), in a side panel right of the terminal. */
 #workers {
-  flex: 0 0 190px;
+  flex: 0 0 280px;
   box-sizing: border-box;
   padding: 6px 10px;
   overflow: hidden;
