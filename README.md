@@ -45,11 +45,13 @@ Window position, pin state and opacity are saved separately in `window-state.jso
 
 ### Progress bar
 
-Claude Code may only emit progress sequences for terminals it recognises. If the bar never appears, try making the session look like Windows Terminal in `config.json`:
+Claude Code only emits OSC 9;4 progress for terminals it recognises, and it explicitly turns progress *off* when `WT_SESSION` is set (checked in 2.1.289). Make the session look like ConEmu instead in `config.json`:
 
 ```json
-"env": { "WT_SESSION": "1" }
+"env": { "ConEmuTask": "claude-widget" }
 ```
+
+Do not set `WT_SESSION`; it disables the bar.
 
 ## Running from source
 
