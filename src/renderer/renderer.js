@@ -1,4 +1,4 @@
-/* global Terminal, FitAddon, WebLinksAddon */
+/* global Terminal, FitAddon, WebLinksAddon, WidgetWorkers */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -53,10 +53,71 @@
     return true;
   });
 
+  // --- Worker rows (subagents + background shells, fed by hooks/workers-hook.js) ---
+  const workersEl = document.getElementById('workers');
+  const MAX_ROWS = 4;
+  let workerEvents = [];
+  let workerTimer = null;
+  const rowEls = new Map();
+
+  const fmtElapsed = (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const makeRow = () => {
+    const row = document.createElement('div');
+    row.className = 'worker';
+    row.innerHTML = '<span class="icon"></span><span class="label"></span><span class="time"></span>';
+    return row;
+  };
+
+  const renderWorkers = () => {
+    const now = Date.now();
+    const workers = WidgetWorkers.reduce(workerEvents, now);
+    const shown = workers.slice(0, MAX_ROWS);
+    const keep = new Set(shown.map((w) => w.id));
+    for (const [id, el] of rowEls) if (!keep.has(id)) { el.remove(); rowEls.delete(id); }
+    let more = workersEl.querySelector('.more');
+    for (const w of shown) {
+      let row = rowEls.get(w.id);
+      if (!row) {
+        // Insert once and never move it: moving a node restarts its CSS fade/spin animations.
+        // Workers start in time order, so a new row belongs at the end (before "+N more").
+        row = makeRow();
+        rowEls.set(w.id, row);
+        workersEl.insertBefore(row, more);
+      }
+      row.querySelector('.label').textContent = w.label;
+      row.querySelector('.time').textContent = fmtElapsed((w.doneAt ?? now) - w.startedAt);
+      row.classList.toggle('done', w.doneAt !== null);
+    }
+    if (workers.length > MAX_ROWS) {
+      if (!more) { more = document.createElement('div'); more.className = 'worker more'; workersEl.appendChild(more); }
+      more.textContent = `+${workers.length - MAX_ROWS} more`;
+    } else if (more) {
+      more.remove();
+    }
+    workersEl.hidden = workers.length === 0;
+    if (workers.length === 0 && workerTimer) { clearInterval(workerTimer); workerTimer = null; }
+  };
+
+  const clearWorkers = () => {
+    workerEvents = [];
+    renderWorkers();
+  };
+
+  widget.workers.onEvents((events) => {
+    workerEvents = workerEvents.concat(events);
+    renderWorkers();
+    if (!workerTimer) workerTimer = setInterval(renderWorkers, 1000);
+  });
+
   // --- PTY wiring ----------------------------------------------------------
   const start = () => {
     document.body.classList.remove('exited');
     setProgress(0, 0);
+    clearWorkers();
     term.reset();
     fit.fit();
     widget.pty.start(term.cols, term.rows);
