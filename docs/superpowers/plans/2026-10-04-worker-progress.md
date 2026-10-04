@@ -899,8 +899,10 @@ git push
 
 ## Probe findings (filled in by Task 1)
 
-- (a) PostToolUse task id path:
-- (b) Shell id present in Stop `background_tasks` while running / gone after exit:
-- (c) Subagent entries in `background_tasks` (type string, id equals agent_id?):
-- (d) Hooks inherit session env:
-- Resulting settings: `TASK_ID_PATHS =` … ; `SNAPSHOT_KINDS =` …
+Probed 2026-10-04 in Claude Code 2.1.289, inside the widget.
+
+- (a) PostToolUse task id path: `tool_response.backgroundTaskId` (e.g. `"bx9k5rgzg"`). `tool_input.run_in_background === true` for the PowerShell tool.
+- (b) Shell id present in Stop `background_tasks` while running / gone after exit: yes, as `{id, type:"shell", status:"running", description, command}`. After the shell exited, the next snapshot no longer listed it.
+- (c) Subagent entries in `background_tasks`: `type: "subagent"`, and `id` equals `agent_id`. The `SubagentStop` snapshot still lists the stopping agent as running, which is harmless because the `stop` line is written first. `SubagentStop` can fire twice for one agent, and also fires for internal agents that never had a `SubagentStart`. Both are already ignored by the reducer.
+- (d) Hooks inherit session env: yes (`ConEmuTask` was `"claude-widget"` in the hook).
+- Resulting settings: `TASK_ID_PATHS = [['tool_response', 'backgroundTaskId']]` (unchanged); `SNAPSHOT_KINDS = ['shell', 'agent']`.
