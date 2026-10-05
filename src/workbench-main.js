@@ -3,7 +3,7 @@
 // passes in what it needs from the rest of the widget.
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { BrowserWindow, dialog, shell, clipboard } = require('electron');
 const gitOps = require('./git-ops');
 const guard = require('./system-guard');
@@ -11,6 +11,8 @@ const bench = require('./bench');
 const syslogs = require('./syslogs');
 const usage = require('./usage');
 const templates = require('./templates');
+const generators = require('./generators');
+const spfx = require('./spfx');
 
 const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const sq = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
@@ -253,12 +255,59 @@ function setupWorkbench(d) {
   });
 
   // --- New project ----------------------------------------------------------------------------------
-  handle('wb:templates', () => ({ templates: templates.list(), root: d.projectsRoot(), gh: !!d.which(isWin ? 'gh.exe' : 'gh') }));
-  handle('wb:project:create', async ({ name, template, git, install, github }) => {
+// Template cards in this order; the generator ones (src/generators.js) fetch the latest framework release.
+  const TEMPLATE_ORDER = ['empty', 'node-cli', 'web-vite', 'tanstack-start', 'nextjs', 'electron', 'python', 'csharp-console', 'csharp-webapi', 'spfx'];
+  const allTemplates = () => [...templates.list(), ...generators.list()]
+    .sort((a, b) => TEMPLATE_ORDER.indexOf(a.id) - TEMPLATE_ORDER.indexOf(b.id));
+  handle('wb:templates', () => ({
+    templates: allTemplates(),
+    root: d.projectsRoot(),
+    gh: !!d.which(isWin ? 'gh.exe' : 'gh'),
+    spfx: { componentTypes: Object.entries(spfx.COMPONENT_TYPES).map(([id, t]) => ({ id, label: t.label })), frameworks: Object.entries(spfx.FRAMEWORKS).map(([id, label]) => ({ id, label })) }
+  }));
+
+  const nodeVersion = () => new Promise((resolve) => {
+    execFile('node', ['--version'], { timeout: 8000, windowsHide: true, shell: isWin }, (err, out) => resolve(err ? null : String(out).trim()));
+  });
+  // The release a generator template will use: { version, released, node, nodeOk, installedNode } or { error }.
+  const latestCache = new Map();
+  async function latestFor(id) {
+    const hit = latestCache.get(id);
+    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.info;
+    const installedNode = await nodeVersion();
+    let info;
+    if (id === 'spfx') {
+      info = await spfx.latest({ installedNode });
+    } else {
+      const t = generators.GENERATOR_TEMPLATES.find((x) => x.id === id);
+      if (!t) return { error: 'Unknown template' };
+      try {
+        const doc = await spfx.fetchJson(`https://registry.npmjs.org/${t.package.replace('/', '%2F')}`);
+        info = { ...spfx.latestFrom(doc), installedNode };
+      } catch (err) {
+        info = { error: err.message, installedNode };
+      }
+    }
+    if (!info.error) latestCache.set(id, { at: Date.now(), info });
+    return info;
+  }
+  handle('wb:template:latest', (id) => latestFor(id));
+  // The newest installed .NET SDK as a target framework (net10.0), or null without the SDK.
+  const dotnetTfm = () => new Promise((resolve) => {
+    execFile('dotnet', ['--list-sdks'], { timeout: 8000, windowsHide: true }, (err, out) => {
+      if (err) return resolve(null);
+      resolve(templates.tfmFromSdks(String(out)));
+    });
+  });
+
+  handle('wb:project:create', async ({ name, template, git, install, github, options }) => {
     if (!templates.validName(name)) return { error: 'Use letters, numbers, spaces, dots, dashes or underscores for the name' };
     const dir = path.join(d.projectsRoot(), name);
     if (fs.existsSync(dir) && fs.readdirSync(dir).length) return { error: `${dir} already exists and is not empty` };
-    const r = templates.render(template, name);
+    if (generators.isGenerator(template)) return createGenerated({ name, dir, template, git, install, github, options });
+    const isDotnet = String(template).startsWith('csharp');
+    const tfm = isDotnet ? await dotnetTfm() : null;
+    const r = templates.render(template, name, tfm ? { tfm } : {});
     if (!r) return { error: 'Unknown template' };
     try {
       for (const [rel, text] of Object.entries(r.files)) {
@@ -270,6 +319,7 @@ function setupWorkbench(d) {
       return { error: err.message };
     }
     const notes = [];
+    if (isDotnet && !tfm) notes.push(`The .NET SDK isn't installed, so the project targets ${templates.DEFAULT_TFM}. Install it (${isWin ? 'winget install Microsoft.DotNet.SDK.10' : 'sudo pacman -S dotnet-sdk aspnet-runtime'}), then run dotnet restore.`);
     if (git) {
       const init = await gitOps.git(dir, ['init', '-b', 'main']);
       if (!init.ok) notes.push(`git init failed: ${init.err}`);
@@ -281,7 +331,7 @@ function setupWorkbench(d) {
     }
     const id = d.addProject(dir);
     const steps = [];
-    if (install && r.install) {
+    if (install && r.install && !(isDotnet && !tfm)) {
       const useUv = r.install === 'uv sync' ? !!d.which(isWin ? 'uv.exe' : 'uv') : true;
       steps.push(useUv ? r.install : r.installFallback[isWin ? 'win' : 'linux']);
     }
@@ -289,6 +339,26 @@ function setupWorkbench(d) {
     if (steps.length) d.startTask(id, { label: install ? 'setup' : 'GitHub', command: steps.join(isWin ? '; ' : ' && ') });
     return { ok: true, dir, notes };
   });
+
+  // SPFx, TanStack Start, Next.js: write the first files, then run the framework's generator (and npm
+  // install, git) in a terminal tab of the new project.
+  async function createGenerated({ name, dir, template, git, install, github, options }) {
+    if (!d.which(isWin ? 'node.exe' : 'node')) return { error: 'This template needs Node.js. Install it from Settings → Setup first.' };
+    const shell = d.config().shell || (isWin ? 'powershell.exe' : '');
+    const ps = /(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(shell);
+    const spfxInfo = template === 'spfx' ? await latestFor('spfx') : null;
+    const p = generators.plan(template, name, { isWin, install, git, github: github && !!d.which(isWin ? 'gh.exe' : 'gh'), ps, spfxInfo, spfx: options });
+    if (p.error) return { error: p.error };
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      for (const [rel, text] of Object.entries(p.files)) fs.writeFileSync(path.join(dir, rel), text);
+    } catch (err) {
+      return { error: err.message };
+    }
+    const id = d.addProject(dir);
+    d.startTask(id, { label: 'create', command: p.command });
+    return { ok: true, dir, notes: ['The generator is running in the "create" tab (it takes a minute or two).', ...p.notes] };
+  }
 
   return { open, close: () => { if (win && !win.isDestroyed()) win.destroy(); } };
 }

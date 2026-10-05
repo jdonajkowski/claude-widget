@@ -63,7 +63,7 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - **Git badges** in the files pane: M modified, N new, A added, D deleted, R renamed, U conflict, and a dot on folders with changes
 - **Project search:** the box at the top of the files pane (`Ctrl+Shift+F`) searches file names and contents (plain text, `.*` regex, `Aa` match case), skipping `node_modules`, build output and binaries. Click a hit to open the editor at that line
 - **Worktree sessions:** right-click a git project → **New worktree session…** makes a second checkout on its own branch in `~/Projects/<project>--<branch>`, which shows up in the list (⑂) with its own Claude session, so two sessions can work on the same repo without colliding. **Remove this worktree…** deletes the folder and keeps the branch
-- **New project** (Workbench): starter projects written straight to disk (empty, Node.js tool, Vite web app, Electron app, Python package), each with `AGENTS.md` + a `CLAUDE.md` that imports it, `.gitignore`, optionally a git repo with a first commit, dependencies installed in a terminal tab, and a private GitHub repo (`gh`)
+- **New project** (Workbench): starter projects written straight to disk (empty, Node.js tool, Vite web app, Electron app, Python package, C# console app, C# web API), each with `AGENTS.md` + a `CLAUDE.md` that imports it, `.gitignore`, optionally a git repo with a first commit, dependencies installed in a terminal tab, and a private GitHub repo (`gh`). The C# ones are a solution with an xUnit test project, targeting the newest installed .NET SDK. **SPFx**, **TanStack Start** and **Next.js** come from the framework's own generator (Yeoman generator, TanStack CLI, create-next-app) so they start on the latest release, which the form looks up on npm and shows. For SPFx it also shows which Node.js versions that release supports and whether yours is one (the generator runs on a supported Node through npx, and the project gets an `.nvmrc`); you pick a web part (React, no framework, minimal), an extension or a library
 - **Usage** (Workbench): cost and tokens per day (last 30 days) and per session with its project, from [ccusage](https://github.com/ryoppippi/ccusage) (run through `npx` if it isn't installed). Without Node.js it counts tokens from Claude's transcripts, without cost
 
 ### For tuning the system
@@ -222,7 +222,7 @@ src/search.js            Project search
 src/sysmon.js            System monitor sampling; src/bench.js + bench-runner.js the benchmark
 src/syslogs.js           Event Log / journal reader
 src/usage.js             Usage from ccusage or Claude's transcripts
-src/templates.js         New project templates
+src/templates.js         New project templates written to disk; src/generators.js + src/spfx.js the generator ones (SPFx, TanStack Start, Next.js)
 src/workbench-main.js    Workbench window and its IPC
 src/preload.js           Bridge exposed to the main window as window.widget
 src/renderer/            Main window UI: terminals, project rail, files pane

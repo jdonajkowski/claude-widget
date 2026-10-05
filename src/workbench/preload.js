@@ -50,5 +50,6 @@ contextBridge.exposeInMainWorld('wb', {
   },
   usage: { get: inv('wb:usage:get') },
   templates: inv('wb:templates'),
-  createProject: inv('wb:project:create')
+  createProject: inv('wb:project:create'),
+  templateLatest: inv('wb:template:latest')
 });

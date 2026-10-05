@@ -103,15 +103,118 @@ const TEMPLATES = [
   }
 ];
 
+// C# names: PascalCase identifier from the folder name ("my app" -> "MyApp").
+function csName(name) {
+  const parts = String(name).split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const n = parts.map((p) => p[0].toUpperCase() + p.slice(1)).join('') || 'App';
+  return /^\d/.test(n) ? `App${n}` : n;
+}
+
+const DEFAULT_TFM = 'net10.0';
+
+// `dotnet --list-sdks` output -> target framework of the newest SDK ("10.0.100 [C:\...]" -> "net10.0").
+function tfmFromSdks(text) {
+  const majors = [...String(text).matchAll(/^(\d+)\.\d+\.\d+/gm)].map((m) => Number(m[1])).filter((n) => n >= 6);
+  return majors.length ? `net${Math.max(...majors)}.0` : null;
+}
+const CS_IGNORE = 'bin/\nobj/\n.vs/\n.vscode/\n*.user\n*.suo\nTestResults/\n.env\n';
+const CS_PROJECT_TYPE = '9A19103F-16F7-4668-BE54-9A1E7A4F7556'; // SDK-style project
+const guid = () => require('crypto').randomUUID().toUpperCase();
+
+// A Visual Studio solution listing projects ([{ name, path }] with forward slashes), CRLF like Visual Studio writes it.
+function sln(projects) {
+  const ps = projects.map((p) => ({ ...p, id: guid() }));
+  const lines = [
+    '',
+    'Microsoft Visual Studio Solution File, Format Version 12.00',
+    '# Visual Studio Version 17',
+    'VisualStudioVersion = 17.0.31903.59',
+    'MinimumVisualStudioVersion = 10.0.40219.1',
+    ...ps.flatMap((p) => [`Project("{${CS_PROJECT_TYPE}}") = "${p.name}", "${p.path.replace(/\//g, '\\')}", "{${p.id}}"`, 'EndProject']),
+    'Global',
+    '\tGlobalSection(SolutionConfigurationPlatforms) = preSolution',
+    '\t\tDebug|Any CPU = Debug|Any CPU',
+    '\t\tRelease|Any CPU = Release|Any CPU',
+    '\tEndGlobalSection',
+    '\tGlobalSection(ProjectConfigurationPlatforms) = postSolution',
+    ...ps.flatMap((p) => ['Debug', 'Release'].flatMap((c) => [`\t\t{${p.id}}.${c}|Any CPU.ActiveCfg = ${c}|Any CPU`, `\t\t{${p.id}}.${c}|Any CPU.Build.0 = ${c}|Any CPU`])),
+    '\tEndGlobalSection',
+    'EndGlobal',
+    ''
+  ];
+  return lines.join('\r\n');
+}
+
+const csproj = (sdk, props, items = '') => `<Project Sdk="${sdk}">\n\n  <PropertyGroup>\n${Object.entries(props).map(([k, v]) => `    <${k}>${v}</${k}>`).join('\n')}\n  </PropertyGroup>\n${items ? `\n${items}\n` : ''}\n</Project>\n`;
+
+// xUnit test project referencing the app. Floating versions: restore takes the newest stable release.
+const testProj = (tfm, app, extra = '') => csproj('Microsoft.NET.Sdk', { TargetFramework: tfm, Nullable: 'enable', ImplicitUsings: 'enable', IsPackable: 'false' },
+  `  <ItemGroup>\n    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />\n    <PackageReference Include="xunit" Version="2.*" />\n    <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />\n${extra}  </ItemGroup>\n\n  <ItemGroup>\n    <Using Include="Xunit" />\n  </ItemGroup>\n\n  <ItemGroup>\n    <ProjectReference Include="..\\..\\src\\${app}\\${app}.csproj" />\n  </ItemGroup>`);
+
+const csAgents = (name, app, kind) => agents(name, [
+  `${kind} in src/${app}, xUnit tests in tests/${app}.Tests, solution ${app}.sln.`,
+  'Nullable reference types are on: no `!` to silence warnings without a reason.',
+  'Run `dotnet build` and `dotnet test` after changes, and `dotnet format` on files you changed.'
+]);
+
+const CS_TEMPLATES = [
+  {
+    id: 'csharp-console',
+    label: 'C# console app (.NET)',
+    description: 'A solution with a console app and an xUnit test project.',
+    install: 'dotnet restore',
+    files: (name, { tfm = DEFAULT_TFM } = {}) => {
+      const app = csName(name);
+      return {
+        [`${app}.sln`]: sln([{ name: app, path: `src/${app}/${app}.csproj` }, { name: `${app}.Tests`, path: `tests/${app}.Tests/${app}.Tests.csproj` }]),
+        [`src/${app}/${app}.csproj`]: csproj('Microsoft.NET.Sdk', { OutputType: 'Exe', TargetFramework: tfm, Nullable: 'enable', ImplicitUsings: 'enable', RootNamespace: app }),
+        [`src/${app}/Program.cs`]: `using ${app};\n\nConsole.WriteLine(Greeter.Greet(args.Length > 0 ? args[0] : "world"));\n`,
+        [`src/${app}/Greeter.cs`]: `namespace ${app};\n\npublic static class Greeter\n{\n    public static string Greet(string who) => $"Hello, {who}!";\n}\n`,
+        [`tests/${app}.Tests/${app}.Tests.csproj`]: testProj(tfm, app),
+        [`tests/${app}.Tests/GreeterTests.cs`]: `namespace ${app}.Tests;\n\npublic class GreeterTests\n{\n    [Fact]\n    public void Greets_by_name() => Assert.Equal("Hello, Ada!", Greeter.Greet("Ada"));\n}\n`,
+        'README.md': `# ${name}\n\n\`\`\`\ndotnet run --project src/${app} -- Ada\ndotnet test\n\`\`\`\n`,
+        'AGENTS.md': csAgents(name, app, 'C# console app'),
+        '.gitignore': CS_IGNORE
+      };
+    }
+  },
+  {
+    id: 'csharp-webapi',
+    label: 'C# web API (ASP.NET Core)',
+    description: 'Minimal API with OpenAPI, integration tests with xUnit. Runs on localhost:5080.',
+    install: 'dotnet restore',
+    files: (name, { tfm = DEFAULT_TFM } = {}) => {
+      const app = csName(name);
+      const major = (/^net(\d+)/.exec(tfm) || [])[1] || '10';
+      return {
+        [`${app}.sln`]: sln([{ name: app, path: `src/${app}/${app}.csproj` }, { name: `${app}.Tests`, path: `tests/${app}.Tests/${app}.Tests.csproj` }]),
+        [`src/${app}/${app}.csproj`]: csproj('Microsoft.NET.Sdk.Web', { TargetFramework: tfm, Nullable: 'enable', ImplicitUsings: 'enable', RootNamespace: app },
+          `  <ItemGroup>\n    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="${major}.*" />\n  </ItemGroup>`),
+        [`src/${app}/Program.cs`]: `var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddOpenApi();\n\nvar app = builder.Build();\n\nif (app.Environment.IsDevelopment())\n{\n    app.MapOpenApi(); // the API description at /openapi/v1.json\n}\n\napp.MapGet("/", () => Results.Ok(new { name = "${app}", status = "ok" }));\napp.MapGet("/hello/{name}", (string name) => new Greeting($"Hello, {name}!"));\n\napp.Run();\n\npublic record Greeting(string Message);\n\n// Lets the tests start the app with WebApplicationFactory<Program>.\npublic partial class Program;\n`,
+        [`src/${app}/Properties/launchSettings.json`]: json({ profiles: { http: { commandName: 'Project', launchBrowser: false, applicationUrl: 'http://localhost:5080', environmentVariables: { ASPNETCORE_ENVIRONMENT: 'Development' } } } }),
+        [`src/${app}/appsettings.json`]: json({ Logging: { LogLevel: { Default: 'Information', 'Microsoft.AspNetCore': 'Warning' } }, AllowedHosts: '*' }),
+        [`src/${app}/${app}.http`]: `@host = http://localhost:5080\n\nGET {{host}}/hello/Ada\n\n###\n\nGET {{host}}/openapi/v1.json\n`,
+        [`tests/${app}.Tests/${app}.Tests.csproj`]: testProj(tfm, app, `    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="${major}.*" />\n`),
+        [`tests/${app}.Tests/ApiTests.cs`]: `using System.Net.Http.Json;\nusing Microsoft.AspNetCore.Mvc.Testing;\n\nnamespace ${app}.Tests;\n\npublic class ApiTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>\n{\n    [Fact]\n    public async Task Hello_greets_by_name()\n    {\n        var greeting = await factory.CreateClient().GetFromJsonAsync<Greeting>("/hello/Ada");\n        Assert.Equal("Hello, Ada!", greeting?.Message);\n    }\n}\n`,
+        'README.md': `# ${name}\n\n\`\`\`\ndotnet run --project src/${app}     # http://localhost:5080/hello/Ada\ndotnet test\n\`\`\`\n\nThe API description is at http://localhost:5080/openapi/v1.json while running in Development. Requests to try are in \`src/${app}/${app}.http\`.\n`,
+        'AGENTS.md': csAgents(name, app, 'ASP.NET Core minimal API'),
+        '.gitignore': CS_IGNORE
+      };
+    }
+  }
+];
+
+TEMPLATES.push(...CS_TEMPLATES);
+
 // Files to write for a template, plus the CLAUDE.md that imports AGENTS.md (Claude Code reads CLAUDE.md).
-function render(id, name) {
+function render(id, name, opts = {}) {
   const t = TEMPLATES.find((x) => x.id === id);
   if (!t) return null;
-  const files = t.files(String(name).trim());
+  const files = t.files(String(name).trim(), opts);
   if (files['AGENTS.md'] && !files['CLAUDE.md']) files['CLAUDE.md'] = '@AGENTS.md\n';
   return { files, install: t.install || null, installFallback: t.installFallback || null, run: t.run || null };
 }
 
 const list = () => TEMPLATES.map(({ id, label, description }) => ({ id, label, description }));
 
-module.exports = { validName, pkgName, pyName, render, list };
+module.exports = { validName, pkgName, pyName, csName, tfmFromSdks, render, list, DEFAULT_TFM };

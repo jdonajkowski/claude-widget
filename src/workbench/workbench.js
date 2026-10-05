@@ -227,17 +227,59 @@
       $('new-templates').replaceChildren(...tplInfo.templates.map((t) => {
         const c = el('div', `tpl${t.id === tplChoice ? ' on' : ''}`);
         c.append(el('b', '', t.label), el('span', '', t.description));
-        c.onclick = () => { tplChoice = t.id; for (const x of document.querySelectorAll('.tpl')) x.classList.toggle('on', x === c); };
+        c.onclick = () => { tplChoice = t.id; for (const x of document.querySelectorAll('.tpl')) x.classList.toggle('on', x === c); showTemplateExtras(); };
         return c;
       }));
+      const fill = (sel, items) => sel.replaceChildren(...items.map((i) => { const o = el('option', '', i.label); o.value = i.id; return o; }));
+      fill($('new-spfx-type'), tplInfo.spfx.componentTypes);
+      fill($('new-spfx-fw'), tplInfo.spfx.frameworks);
+      $('new-spfx-type').onchange = () => {
+        const type = $('new-spfx-type').value;
+        $('new-spfx-fw-row').hidden = type !== 'webpart';
+        $('new-spfx-name-row').hidden = type === 'library';
+      };
     }
     $('new-name').focus();
   };
+  // Generator templates (SPFx, TanStack Start, Next.js) show the release they will use, looked up on npm.
+  let latestReq = 0;
+  async function showTemplateExtras() {
+    const t = tplInfo && tplInfo.templates.find((x) => x.id === tplChoice);
+    $('new-spfx').hidden = tplChoice !== 'spfx';
+    const box = $('new-latest');
+    if (!t || !t.generator) { box.hidden = true; return; }
+    if (t.npmName && $('new-name').value && !/^[a-z0-9][a-z0-9._-]*$/.test($('new-name').value)) {
+      $('new-name').value = $('new-name').value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '');
+    }
+    box.hidden = false;
+    box.className = '';
+    box.textContent = 'Checking the latest release on npm…';
+    const req = ++latestReq;
+    const r = await wb.templateLatest(tplChoice);
+    if (req !== latestReq) return;
+    if (!r || r.error) {
+      box.textContent = `Couldn't check npm (${r ? r.error : 'no answer'}); the generator's newest version is used.`;
+      return;
+    }
+    const date = r.released ? ` (released ${new Date(r.released).toLocaleDateString()})` : '';
+    const what = { spfx: 'SharePoint Framework', 'tanstack-start': 'TanStack Start', nextjs: 'Next.js' }[tplChoice];
+    box.replaceChildren(el('span', '', `Latest ${what}: ${r.version}${date}.`));
+    if (tplChoice === 'spfx' && r.node) {
+      const ok = r.nodeOk;
+      box.append(el('span', '', ` Supports Node.js ${r.node}; you have ${r.installedNode || 'no Node.js'}`));
+      if (ok === false) {
+        box.classList.add('warn');
+        box.append(el('span', 'bad', ` (not supported). The generator runs on Node ${r.nodeMajor} through npx. Builds may still work on your version; if something fails, use Node ${r.nodeMajor} (nvm-windows, fnm or Volta; the project gets an .nvmrc).`));
+      } else if (ok) box.append(el('span', '', ' ✓'));
+    }
+  }
+
   $('new-create').onclick = async () => {
     $('new-create').disabled = true;
     setStatus('new-status', 'Creating…');
     try {
-      const r = await wb.createProject({ name: $('new-name').value, template: tplChoice, git: $('new-git').checked, install: $('new-install').checked, github: $('new-gh').checked });
+      const options = tplChoice === 'spfx' ? { componentType: $('new-spfx-type').value, framework: $('new-spfx-fw').value, componentName: $('new-spfx-name').value } : undefined;
+      const r = await wb.createProject({ name: $('new-name').value, template: tplChoice, git: $('new-git').checked, install: $('new-install').checked, github: $('new-gh').checked, options });
       if (r.error) return setStatus('new-status', r.error, 'error');
       setStatus('new-status', `Created ${r.dir}. It is open in the widget.${r.notes.length ? ` ${r.notes.join(' ')}` : ''}`, 'ok');
       $('new-name').value = '';

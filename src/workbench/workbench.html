@@ -62,6 +62,12 @@
       <p class="muted">Creates the folder in <code id="new-root"></code>, adds it to the project list and opens it in the widget.</p>
       <label>Name<input id="new-name" placeholder="my-app" spellcheck="false"></label>
       <div id="new-templates"></div>
+      <div id="new-spfx" hidden>
+        <label>Component<select id="new-spfx-type"></select></label>
+        <label id="new-spfx-fw-row">Framework<select id="new-spfx-fw"></select></label>
+        <label id="new-spfx-name-row">Component name<input id="new-spfx-name" value="HelloWorld" spellcheck="false"></label>
+      </div>
+      <p id="new-latest" hidden></p>
       <label class="check"><input type="checkbox" id="new-git" checked> Git repository with a first commit</label>
       <label class="check"><input type="checkbox" id="new-install" checked> Install dependencies afterwards (in a terminal tab)</label>
       <label class="check" id="new-gh-row"><input type="checkbox" id="new-gh"> Create a private GitHub repository and push</label>

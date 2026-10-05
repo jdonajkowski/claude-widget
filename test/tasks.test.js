@@ -59,6 +59,7 @@ test('a solution runs each app project it lists', () => {
 test('chain stops at the first failure in either shell', () => {
   assert.equal(t.chain(['a', 'b', 'c'], false), 'a && b && c');
   assert.equal(t.chain(['a', 'b'], true), 'a; if ($?) { b }');
+  assert.equal(t.chain(['a', 'b', 'c'], true), 'a; if ($?) { b; if ($?) { c } }');
 });
 
 test('detectServerUrl finds what dev servers print', () => {

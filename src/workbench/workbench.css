@@ -83,7 +83,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 textarea { font-family: 'Cascadia Mono', Consolas, monospace; resize: vertical; width: 100%; }
 label { display: block; margin: 0 0 12px; }
-label > input:not([type=checkbox]) { display: block; width: 100%; max-width: 420px; margin-top: 4px; }
+label > input:not([type=checkbox]), label > select { display: block; width: 100%; max-width: 420px; margin-top: 4px; }
 label.check { display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
 .page > label.check { margin: 6px 0; }
 input[type=checkbox] { accent-color: var(--accent); }
@@ -178,6 +178,11 @@ td { padding: 4px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); verti
 #usage-sessions td:first-child { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* New project */
+#new-spfx { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin: -4px 0 12px; }
+#new-spfx[hidden], #new-latest[hidden], #new-spfx label[hidden] { display: none; }
+#new-latest { margin: -4px 0 14px; padding: 8px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; line-height: 17px; }
+#new-latest.warn { border-color: rgba(212, 167, 44, 0.6); }
+#new-latest .bad { color: #d4a72c; }
 #new-templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin: 4px 0 14px; }
 .tpl { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--panel); }
 .tpl:hover { border-color: rgba(217, 119, 87, 0.5); }
