@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/logo.svg" width="360" alt="A gremlin peeking over a page with a terminal prompt"></p>
+<p align="center"><img src="assets/logo.png" width="420" alt="Gremlin: a coral gremlin with circuit lines on its forehead, scowling over the top of a terminal window"></p>
 
 # Gremlin
 
@@ -239,8 +239,8 @@ hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, r
 bin/                     gremlin-open and gremlin-browser (sh, .cmd, .ps1; gremlin-browser.js is the client), on PATH in Gremlin sessions; widget-open and widget-browser are the old names, kept as aliases
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
-scripts/render-icons.js  Renders assets/icon.ico and icon.png from assets/icon.svg (npx electron scripts/render-icons.js)
+scripts/render-icons.js  Builds assets/logo.png, icon.png and icon.ico from assets/logo-source.png (npx electron scripts/render-icons.js)
 test/                    Unit tests (npm test)
-assets/                  App and tray icons (icon.svg is the source) and the logo (logo.svg)
+assets/                  The logo artwork (logo-source.png), the trimmed logo and the app and tray icons made from it
 backup/                  Source before the progress-bar patch, and a snapshot of a working config
 ```
