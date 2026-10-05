@@ -56,6 +56,7 @@ function normalize(form, defaults) {
   if ('fontFamily' in f) values.fontFamily = str(f.fontFamily) || defaults.fontFamily;
   if ('showSysmon' in f) values.showSysmon = !!f.showSysmon;
   if ('autoOpenDevServer' in f) values.autoOpenDevServer = !!f.autoOpenDevServer;
+  if ('browserControl' in f) values.browserControl = !!f.browserControl;
   if ('guardMode' in f) {
     if (GUARD_MODES.includes(f.guardMode)) values.guardMode = f.guardMode;
     else errors.push(`System change guard must be one of ${GUARD_MODES.join(', ')}`);

@@ -35,6 +35,7 @@
         <select name="guardMode"><option value="ask">Claude asks first (recommended)</option><option value="log">Only log them, with their undo</option><option value="off">Off</option></select></label>
       <label class="check"><input type="checkbox" name="showSysmon"> Show CPU, memory and GPU in the side panel</label>
       <label class="check"><input type="checkbox" name="autoOpenDevServer"> Open dev servers started from the Run menu in the built-in browser</label>
+      <label class="check"><input type="checkbox" name="browserControl"> Let Claude drive the built-in browser (widget-browser: screenshots, clicks, console, DevTools Protocol). Applies after a restart</label>
 
       <h2>Window</h2>
       <label>Show / hide hotkey<span class="hint">Electron accelerator, e.g. <code>Control+Alt+Space</code>. Empty turns it off</span><input name="hotkey"></label>

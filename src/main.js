@@ -12,6 +12,7 @@ const settingsLib = require('./settings');
 const launch = require('./claude-launch');
 const setupChecks = require('./setup-checks');
 const { createBrowser } = require('./browser-window');
+const { createControl } = require('./browser-control');
 const { isLocalUrl, openTarget, prependPath } = require('./browser-url');
 const { createAux } = require('./aux-sessions');
 const { startElevated } = require('./admin-shell');
@@ -51,6 +52,8 @@ const DEFAULT_CONFIG = {
   showSysmon: true,
   // Open the URL a Run-menu dev server prints in the built-in browser.
   autoOpenDevServer: true,
+  // widget-browser (bin/): sessions may drive the built-in browser's page (src/browser-control.js)
+  browserControl: true,
   alwaysOnTop: true,
   opacity: 0.95,
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
@@ -128,7 +131,8 @@ const binDir = path.join(__dirname, '..', 'bin');
 const openEnv = () => ({
   ...prependPath(process.env, binDir, isWin),
   CLAUDE_WIDGET_EXE: process.execPath,
-  ...(app.isPackaged ? {} : { CLAUDE_WIDGET_APP: path.join(__dirname, '..') })
+  ...(app.isPackaged ? {} : { CLAUDE_WIDGET_APP: path.join(__dirname, '..') }),
+  ...(control && control.url() ? { CLAUDE_WIDGET_BROWSER: control.url(), CLAUDE_WIDGET_BROWSER_TOKEN: control.token } : {})
 });
 const globalClaudeSettings = () => readJson(path.join(claudeDir(), 'settings.json'), {});
 // The guard hook's change log and file/registry backups (see hooks/guard-hook.js).
@@ -906,6 +910,8 @@ ipcMain.on('md:vscode', (ev) => { const f = mdFileOf(ev.sender); if (f) openInVS
 const browser = createBrowser({ icon: path.join(__dirname, '..', 'assets', 'icon.png'), projectDir: () => projectPath(activeId), isWin });
 browser.handle(ipcMain);
 ipcMain.on('browser:open', () => browser.open());
+// Sessions started after this listens get CLAUDE_WIDGET_BROWSER(_TOKEN) for widget-browser (see openEnv).
+const control = config.browserControl === false ? null : createControl({ browser });
 
 // ---------------------------------------------------------------------------
 // Files pane: browse the active project's folder
@@ -1403,7 +1409,8 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    if (control) await control.start().catch((err) => console.error('widget-browser endpoint:', err.message));
     createWindow();
     for (const ev of ['show', 'hide', 'minimize', 'restore']) win.on(ev, watchSysmon);
     win.once('ready-to-show', watchSysmon);
@@ -1419,6 +1426,7 @@ if (!app.requestSingleInstanceLock()) {
     sessions.closeAll();
     aux.closeAll();
     sampler.stop();
+    if (control) control.stop();
     if (rootWatcher) rootWatcher.close();
     clearInterval(statusTimer);
     clearInterval(gitTimer);

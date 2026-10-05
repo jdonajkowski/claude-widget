@@ -46,7 +46,8 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
-- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Claude (or you) can open a page here from any widget session or terminal tab with `widget-open <file-or-url>`, e.g. `widget-open mockups/login.html`. Pages run sandboxed, with no permissions (camera, location, …) and their own storage
+- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Claude (or you) can open a page here from any widget session or terminal tab with `widget-open <file-or-url>`, e.g. `widget-open mockups/login.html`.
+- **Browser control for Claude:** `widget-browser` in widget sessions drives the browser's page: `open`, `screenshot` (prints a PNG path Claude can read; `--full`, `--selector`), `viewport mobile`, `text`/`html`, `click`, `type`, `press`, `wait`, `eval`, `console --errors`, `network --failed`, and `cdp <Domain.method> [json]` for any Chrome DevTools Protocol command. It goes through a local endpoint (127.0.0.1, a random port and a per-run token that only widget sessions get) that only reaches the browser page: the widget's own windows aren't exposed, and browser-wide CDP domains (Target, Browser) are refused. Turn it off with `browserControl` Pages run sandboxed, with no permissions (camera, location, …) and their own storage
 - **Markdown popouts:** click a `.md` path in the terminal to open it rendered (live-reloads on save). Paths relative to a subfolder, bare file names, a trailing period and OSC 8 links all work. **Edit** opens the file in the editor
 - **Settings window:** every setting in a form (gear button), plus **Global instructions**, an editor for the `AGENTS.md` Claude follows in every project
 - **Status panel** (right): worker rows for subagents and background shells, then progress bars: Claude's task list (done / total, with the task in progress), a running benchmark, and the project's Run-menu tasks (running, passed, failed; click one to show its tab). Below them CPU, CPU temperature, memory, GPU, VRAM and disk, and at the bottom the model, cost, context use, 5-hour and 7-day limits with a bar for time through the 5-hour window (usage ahead of it means you'll hit the limit before it resets), git branch and changes, and a turn timer. It collapses to a slim strip
@@ -118,6 +119,7 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
 | `showSysmon` | `true` | CPU, temperature, memory, GPU, VRAM and disk in the side panel |
 | `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
+| `browserControl` | `true` | Let sessions drive the built-in browser with `widget-browser` (takes effect after a restart) |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |
 | `cwd` | home folder | Project to open at launch when no project was open last time, if it is in the list |
 | `env` | `{}` | Extra environment variables for the sessions |
@@ -203,6 +205,7 @@ src/setup-checks.js      Setup tab: tools, install and sign-in commands
 src/settings.js          Settings form validation, AGENTS.md import
 src/files.js             Files pane: folder listing, open actions, Markdown lookup, VS Code links
 src/browser-window.js    Built-in browser window; src/browser-url.js turns typed text into URLs
+src/browser-control.js   widget-browser endpoint: CDP on the browser page, token-protected
 src/projects.js          Project list (scan + pinned - hidden) and initials
 src/session-state.js     Reducer: per-session signals -> project dot
 src/workers.js           Reducer: hook events -> worker rows and the task list progress
@@ -229,7 +232,7 @@ src/browser/             Browser toolbar
 src/md/                  Markdown popout window
 src/workbench/           Workbench window: Git, New project, Usage, Monitor, Changes, Logs
 hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, run by Claude Code
-bin/                     widget-open (sh, .cmd, .ps1): put on PATH in widget sessions, opens a page in the built-in browser
+bin/                     widget-open and widget-browser (sh, .cmd, .ps1; widget-browser.js is the client), on PATH in widget sessions
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
 test/                    Unit tests (npm test)

@@ -17,6 +17,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
   let device = 'full';
   let watcher = null;
   let reloadTimer;
+  const pageListeners = []; // src/browser-control.js: told about each new page view
 
   function pageSession() {
     const ses = session.fromPartition('persist:widget-browser');
@@ -89,6 +90,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
     view.setBackgroundColor(background || '#ffffff');
     win.contentView.addChildView(view);
     const wc = view.webContents;
+    for (const fn of pageListeners) fn(wc);
 
     // Pages may only go to http, https and file URLs; popups load in the same view.
     wc.setWindowOpenHandler(({ url }) => {
@@ -147,11 +149,46 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
     go(input);
   }
 
-  function go(input) {
+  function go(input, { focus = true } = {}) {
     const url = toUrl(input, { home: app.getPath('home'), isWin });
-    if (!url) return send('browser:status', `Can't open "${input}". Use an http(s) URL, localhost:port or a file path.`);
+    if (!url) { send('browser:status', `Can't open "${input}". Use an http(s) URL, localhost:port or a file path.`); return null; }
     view.webContents.loadURL(url).catch(() => {}); // failures are reported by did-fail-load
-    view.webContents.focus();
+    if (focus) view.webContents.focus();
+    return url;
+  }
+
+  // For widget-browser: opens the window without taking focus from the user, loads input (if any) and
+  // resolves once the page has loaded, with its URL and title (or the load error).
+  async function load(input, { focus = false, timeoutMs = 20000 } = {}) {
+    if (!win || win.isDestroyed()) await create();
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) (focus ? win.show() : win.showInactive());
+    if (!input) return { url: view.webContents.getURL() };
+    const wc = view.webContents;
+    let failed = null;
+    const onFail = (_e, code, desc, _url, isMain) => { if (isMain && code !== -3) failed = desc; };
+    wc.on('did-fail-load', onFail);
+    try {
+      const done = new Promise((resolve) => {
+        const t = setTimeout(resolve, timeoutMs);
+        wc.once('did-stop-loading', () => { clearTimeout(t); resolve(); });
+      });
+      const url = go(input, { focus });
+      if (!url) throw new Error(`Can't open "${input}". Use an http(s) URL, localhost:port or a file path.`);
+      await done;
+      if (failed) throw new Error(`Could not load ${url}: ${failed}`);
+      return { url: wc.getURL(), title: wc.getTitle() };
+    } finally {
+      wc.removeListener('did-fail-load', onFail);
+    }
+  }
+
+  function setDevice(name) {
+    if (!(name in DEVICES)) return false;
+    device = name;
+    layout();
+    sendState();
+    return true;
   }
 
   // Saved next to the active project by default, so Claude can look at it too.
@@ -182,12 +219,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
     ipcMain.on('browser:forward', (e) => { if (fromToolbar(e)) view.webContents.navigationHistory.goForward(); });
     ipcMain.on('browser:reload', (e, hard) => { if (fromToolbar(e)) (hard ? view.webContents.reloadIgnoringCache() : view.webContents.reload()); });
     ipcMain.on('browser:devtools', (e) => { if (fromToolbar(e)) toggleDevTools(); });
-    ipcMain.on('browser:device', (e, name) => {
-      if (!fromToolbar(e) || !(name in DEVICES)) return;
-      device = name;
-      layout();
-      sendState();
-    });
+    ipcMain.on('browser:device', (e, name) => { if (fromToolbar(e)) setDevice(name); });
     ipcMain.handle('browser:screenshot', (e) => (fromToolbar(e) ? screenshot() : null));
     ipcMain.on('browser:external', (e) => {
       if (!fromToolbar(e)) return;
@@ -199,6 +231,11 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
 
   return {
     open,
+    load,
+    setDevice,
+    device: () => device,
+    page: () => (view && !view.webContents.isDestroyed() ? view.webContents : null),
+    onPage: (fn) => pageListeners.push(fn),
     handle,
     close: () => { if (win && !win.isDestroyed()) win.destroy(); }
   };

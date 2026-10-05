@@ -3,3 +3,4 @@
 bin/widget-open text eol=lf
 bin/*.cmd text eol=crlf
 bin/*.ps1 text eol=crlf
+bin/widget-browser text eol=lf
