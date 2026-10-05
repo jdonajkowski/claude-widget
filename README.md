@@ -154,7 +154,7 @@ Only permission prompts and questions turn the dot to "needs you" (`notification
 
 ### Project list
 
-The list shows every subfolder of `projectsRoot` plus folders you pin from anywhere (📌), in alphabetical order. Click a project to switch to it. The session you leave keeps running in the background. A project's session starts the first time you open it after Gremlin starts, with `--continue` if Claude has history for that folder. ↻ restarts only the active session, with a fresh conversation. Right-click a project for Close session, Open in Explorer, and Hide (Unpin for pinned folders). The + button adds a folder or un-hides one.
+The list shows every subfolder of `projectsRoot` plus folders you pin from anywhere (📌), in alphabetical order. Click a project to switch to it. The session you leave keeps running in the background. A project's session starts the first time you open it after Gremlin starts, with `--continue` if Claude has history for that folder. ↻ restarts only the active session, with a fresh conversation. Right-click a project for Close session, Rename…, Open in Explorer, and Hide (Unpin for pinned folders). **Rename…** changes the name shown in the list and the title bar (`Gremlin - <name>`) and keeps it in `projects.json`. The folder itself isn't renamed. Leave the name empty to go back to the folder name. The + button adds a folder or un-hides one.
 
 | Dot | Meaning |
 | --- | --- |

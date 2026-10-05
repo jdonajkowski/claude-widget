@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normId, initials, buildList } = require('../src/projects');
+const { normId, initials, buildList, setName } = require('../src/projects');
 
 const yes = () => true;
 
@@ -46,4 +46,19 @@ test('duplicate pinned entries collapse; missing pinned folders are flagged', ()
 
 test('garbage input does not throw', () => {
   assert.deepEqual(buildList({ scanned: null, pinned: [null, 3, ''], hidden: 'x', exists: yes, isWin: true }), []);
+  assert.equal(buildList({ scanned: ['C:\\p\\a'], pinned: [], hidden: [], names: 'x', exists: yes, isWin: true })[0].name, 'a');
+});
+
+test('a saved name replaces the folder name, and sorts and abbreviates by it', () => {
+  const names = { 'c:\\p\\claude widget': 'Gremlin', 'c:\\p\\zeta': '  ', 'c:\\p\\other': 3 };
+  const list = buildList({ scanned: ['C:\\p\\Claude Widget', 'C:\\p\\zeta', 'C:\\p\\other'], pinned: [], hidden: [], names, exists: yes, isWin: true });
+  assert.deepEqual(list.map((p) => [p.name, p.folder, p.initials]), [['Gremlin', 'Claude Widget', 'GR'], ['other', 'other', 'OT'], ['zeta', 'zeta', 'ZE']]);
+});
+
+test('setName trims, drops empty names and leaves the input alone', () => {
+  const before = { a: 'Old' };
+  assert.deepEqual(setName(before, 'b', '  New name  '), { a: 'Old', b: 'New name' });
+  assert.deepEqual(setName(before, 'a', '   '), {});
+  assert.deepEqual(before, { a: 'Old' });
+  assert.equal(setName({}, 'a', 'x'.repeat(200)).a.length, 80);
 });

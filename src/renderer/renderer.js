@@ -119,6 +119,7 @@
     projects = list;
     openIds = new Set(open);
     renderRail();
+    renderTitle(); // the active project may have been renamed
   });
   widget.projects.onSelect(({ id }) => activate(id));
   widget.projects.onClosed(({ id }) => {
@@ -352,11 +353,16 @@
     showView(id);
   });
 
+  // Title bar and window title (taskbar, Alt+Tab): "Gremlin - <project>".
+  function renderTitle() {
+    const p = projects.find((x) => x.id === activeId);
+    document.title = $('title-text').textContent = p ? `Gremlin - ${p.name}` : 'Gremlin';
+    $('title').title = p ? p.path : '';
+  }
+
   // Everything that shows the active session: title, progress strip, workers, footer.
   function renderActive() {
-    const p = projects.find((x) => x.id === activeId);
-    $('title-text').textContent = p ? p.name : 'Claude Code';
-    $('title').title = p ? p.path : '';
+    renderTitle();
     filesPane.setProject(activeId);
     renderTabs();
     const t = activeId && terminals.get(activeId);
@@ -733,7 +739,7 @@
     if (showMascot !== undefined) document.body.classList.toggle('no-mascot', !showMascot);
   });
 
-  // --- Small prompt (worktree branch name) -------------------------------------
+  // --- Small prompt (worktree branch name, project name) ------------------------
   const modal = $('modal');
   function ask({ title, text, value = '', ok = 'OK', submit }) {
     $('modal-title').textContent = title;
@@ -771,6 +777,16 @@
       if (r && r.error) return r.error;
       toast(`Worktree ready: ${r.dir}`, 3000);
       return null;
+    }
+  }));
+  widget.projects.onRenameAsk(({ id, name, folder }) => ask({
+    title: `Rename ${name}`,
+    text: `The name shown in the project list and title bar. The folder stays "${folder}". Leave empty to use the folder name.`,
+    value: name,
+    ok: 'Rename',
+    submit: async (value) => {
+      const r = await widget.projects.rename(id, value);
+      return r && r.error ? r.error : null;
     }
   }));
   $('btn-min').onclick = () => widget.win.hide();

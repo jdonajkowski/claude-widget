@@ -391,7 +391,8 @@ let rootWatcher = null;
 function loadSaved() {
   const raw = readJson(projectsPath, {});
   const strs = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x) : []);
-  return { pinned: strs(raw.pinned), hidden: strs(raw.hidden) };
+  const names = raw.names && typeof raw.names === 'object' && !Array.isArray(raw.names) ? raw.names : {};
+  return { pinned: strs(raw.pinned), hidden: strs(raw.hidden), names };
 }
 
 function projectsRoot() {
@@ -415,7 +416,7 @@ function scanRoot() {
 
 function scanProjects() {
   const scanned = scanRoot();
-  const list = projects.buildList({ scanned: scanned || [], pinned: saved.pinned, hidden: saved.hidden, exists: (p) => fs.existsSync(p), isWin });
+  const list = projects.buildList({ scanned: scanned || [], pinned: saved.pinned, hidden: saved.hidden, names: saved.names, exists: (p) => fs.existsSync(p), isWin });
   for (const p of list) {
     const main = p.missing ? null : gitOps.worktreeMain(p.path);
     if (main) p.worktreeOf = path.basename(main);
@@ -425,8 +426,9 @@ function scanProjects() {
   for (const id of sessions.ids()) {
     if (known.has(id)) continue;
     const cwd = sessions.cwd(id);
-    const name = path.basename(cwd) || cwd;
-    list.push({ id, path: cwd, name, initials: projects.initials(name), pinned: false, missing: !fs.existsSync(cwd), orphan: true });
+    const folder = path.basename(cwd) || cwd;
+    const name = projects.displayName(saved.names, id, folder);
+    list.push({ id, path: cwd, name, folder, initials: projects.initials(name), pinned: false, missing: !fs.existsSync(cwd), orphan: true });
   }
   list.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   projectList = list;
@@ -555,12 +557,13 @@ ipcMain.on('admin:menu', () => {
 });
 ipcMain.on('workbench:open', (_e, tab) => workbench.open(tab));
 
-// Row context menu: Close session, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
+// Row context menu: Close session, Rename…, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
 ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;
   const items = [];
   if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
+  items.push({ label: 'Rename…', click: () => send('project:renameAsk', { id, name: p.name, folder: p.folder }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
   if (!p.missing && fs.existsSync(path.join(p.path, '.git'))) {
@@ -600,6 +603,14 @@ async function addFolder() {
   saveProjects();
   send('projects:select', { id });
 }
+
+// Renames a project in Gremlin only (projects.json); the folder keeps its name. Empty goes back to the folder name.
+ipcMain.handle('project:rename', (_e, { id, name }) => {
+  if (!projectList.some((x) => x.id === id)) return { error: 'Project not found' };
+  saved.names = projects.setName(saved.names, id, name);
+  saveProjects();
+  return {};
+});
 
 ipcMain.handle('worktree:create', async (_e, { id, branch }) => {
   const p = projectList.find((x) => x.id === id);

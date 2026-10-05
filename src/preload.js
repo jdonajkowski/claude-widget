@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('widget', {
     onClosed: on('session:closed'),
     onSelect: on('projects:select'),
     onWorktreeAsk: on('worktree:ask'),
+    onRenameAsk: on('project:renameAsk'),
+    rename: (id, name) => ipcRenderer.invoke('project:rename', { id, name }),
     createWorktree: (id, branch) => ipcRenderer.invoke('worktree:create', { id, branch })
   },
   aux: {

@@ -1,4 +1,4 @@
-// Builds the ordered project list for the rail from the folder scan and the saved pinned/hidden lists.
+// Builds the ordered project list for the rail from the folder scan and the saved pinned/hidden lists and names.
 // Pure: main.js does the file I/O and passes the results in.
 const path = require('path');
 
@@ -20,7 +20,22 @@ function initials(name) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-function buildList({ scanned, pinned, hidden, exists, isWin = process.platform === 'win32' }) {
+// The name to show for a project: its saved name (Rename… in the row menu), else the folder name.
+function displayName(names, id, folder) {
+  const n = names && typeof names === 'object' ? names[id] : null;
+  return typeof n === 'string' && n.trim() ? n.trim() : folder;
+}
+
+// A copy of names with id renamed to name; an empty name goes back to the folder name.
+function setName(names, id, name) {
+  const next = { ...names };
+  const n = String(name || '').trim().slice(0, 80);
+  if (n) next[id] = n;
+  else delete next[id];
+  return next;
+}
+
+function buildList({ scanned, pinned, hidden, names, exists, isWin = process.platform === 'win32' }) {
   const pp = isWin ? path.win32 : path.posix;
   const strs = (a) => (Array.isArray(a) ? a.filter((s) => typeof s === 'string' && s) : []);
   const hiddenSet = new Set(strs(hidden).map((h) => normId(h, isWin)));
@@ -29,11 +44,14 @@ function buildList({ scanned, pinned, hidden, exists, isWin = process.platform =
     const id = normId(p, isWin);
     if (byId.has(id)) return;
     const full = pp.resolve(p);
+    const folder = pp.basename(full) || full;
+    const name = displayName(names, id, folder);
     byId.set(id, {
       id,
       path: full,
-      name: pp.basename(full) || full,
-      initials: initials(pp.basename(full) || full),
+      name,
+      folder,
+      initials: initials(name),
       pinned: isPinned,
       missing: isPinned && !exists(full)
     });
@@ -46,4 +64,4 @@ function buildList({ scanned, pinned, hidden, exists, isWin = process.platform =
   });
 }
 
-module.exports = { normId, initials, buildList };
+module.exports = { normId, initials, displayName, setName, buildList };
