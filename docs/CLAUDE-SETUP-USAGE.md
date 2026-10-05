@@ -2,6 +2,57 @@
 
 User-level setup in `C:\Users\jacob\.claude`. Applies to every project. Original settings backed up at `settings.json.bak`.
 
+> **Widget sessions use their own copy.** Since widget 0.3.0, sessions started inside Claude Widget use `C:\Users\jacob\Projects\.claude` (copied once from `~\.claude`). To change something for widget sessions, edit the file there (e.g. `Projects\.claude\settings.json`, `Projects\.claude\commands\`). The Claude desktop app and plain terminals keep using `~\.claude`.
+
+## Claude Widget tools (0.4.0)
+
+The title bar has these buttons after the folder and globe: **▶ Run**, **⛨ shield** (admin and system) and **grid** (Workbench, `Ctrl+Shift+G`).
+
+### Coding
+
+| To… | Do this |
+|---|---|
+| Run a script, test or dev server | **▶** → pick a task (npm/pnpm/yarn scripts, make, just, cargo, go, python, dotnet, gradle, maven, cmake, docker compose). It runs in a tab above the terminal. A dev server's `localhost` URL opens in the built-in browser by itself |
+| Open a plain terminal in the project | **▶** → New terminal |
+| Switch between Claude and the other tabs | Click the tab, or `Ctrl+PageUp` / `Ctrl+PageDown`. Close with × (or middle-click). After a task exits, Enter runs it again |
+| See what changed in git | The files pane marks changed files: **M** modified, **N** new, **A** added, **D** deleted, **R** renamed, **U** conflict, a dot on folders with changes |
+| Review, stage and commit | Workbench → **Git**: click a file for a side-by-side diff (tick *Inline* for one column). **+** stage, **−** unstage, **↺** discard. Write a message (or **✨ Suggest**, which has Claude write it from the diff) and **Commit** (`Ctrl+Enter`). With nothing staged, Commit takes all changes. **Push** / **Pull** at the top |
+| Search the project | `Ctrl+Shift+F`, or the box at the top of the files pane. `.*` = regex, `Aa` = match case. Click a hit to open the editor at that line; `Esc` clears |
+| Run two Claude sessions on one repo | Right-click the project → **New worktree session…**, type a branch name (new or existing). A second checkout appears in the list as `⑂ project--branch` with its own session. Merge the branch as usual when done, then right-click it → **Remove this worktree…** (the branch is kept) |
+| Start a new project | Workbench → **New project**: name, template (Empty, Node.js tool, Vite web app, Electron, Python), git + first commit, install dependencies, optional private GitHub repo. It opens in the widget, with `AGENTS.md` ready for project instructions |
+| See token use and cost | Workbench → **Usage**: today, last 30 days, all time, a daily chart and every session with its project (from ccusage). Tick *Include ~/.claude* to count Claude used outside the widget too |
+
+### Tuning the system
+
+**The safety net.** When Claude in a widget session runs a command that changes the system (registry, services, power plans, boot settings, Windows features, Defender/firewall, environment variables, `C:\Windows` / hosts file; on Arch: sudo, pacman, systemctl, sysctl, `/etc`, bootloader…), Claude Code **asks you first**, even in auto-accept mode. The prompt says how many undo steps were recorded. Before asking, the widget saved the old values.
+
+Suggested routine:
+
+1. **Snapshot first:** shield → *Create snapshot…* → **Create snapshot** (approve the UAC prompt). That makes a Windows restore point; on Arch it uses Timeshift or Snapper (`sudo pacman -S timeshift`).
+2. **Benchmark:** Workbench → **Monitor & snapshots** → label it "before", **Run benchmark** (about 10 s, close heavy apps first).
+3. Ask Claude for the tweak, e.g. *"Switch to the High performance power plan and disable SysMain"*. Approve each system change when asked.
+4. **Benchmark again** labelled "after". The table shows the change in % against the baseline (green better, red worse; under 3% is noise).
+5. Didn't help? Workbench → **Changes & undo** → **Undo** on that change. It runs the recorded steps in a terminal window (as administrator when needed), newest first. **Copy undo script** gives you the commands instead. Changes with no automatic undo say so; use the snapshot.
+
+| To… | Do this |
+|---|---|
+| Change how the safety net behaves | Shield menu → *Before system changes*: **Ask first** (default), **Only log them** (no prompt, undo still recorded), **Off**. Also in Settings → General. Restart a session (↻) to apply it there |
+| Watch CPU, memory, GPU | The side panel shows them live; click it (or Workbench → **Monitor & snapshots**) for graphs, per-core load, VRAM, GPU power and disk space. For CPU temperature on Windows, run [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) |
+| Run something as administrator | Shield → **Admin terminal (UAC)**: a red tab with an elevated PowerShell. **Claude as administrator** runs Claude itself elevated, with the safety net still on. On Arch the shield gives a `sudo -s` root shell |
+| Find out what's going wrong | Workbench → **Logs**: errors (or warnings, or critical only) from the Event Log / journal for the last hour, day or week. Click a row to expand it. **Ask Claude** pastes it into the session as a question; review and press Enter. Tick *Follow* to refresh every 10 s |
+| Find the backups | Workbench → Changes → **Backups folder** (`Projects\.claude\widget\changes`): the change log, exported registry keys and copies of system files |
+
+### Shortcuts
+
+| Keys | Action |
+|---|---|
+| `Ctrl+Shift+G` | Workbench |
+| `Ctrl+Shift+F` | Search the project |
+| `Ctrl+PageUp` / `Ctrl+PageDown` | Previous / next terminal tab |
+| `Ctrl+Shift+E` | Files pane |
+| `Ctrl+Shift+B` | Project list |
+| `Ctrl+Shift+W` | Right panel |
+
 ## Status line (ccstatusline)
 
 A bar at the bottom of Claude Code showing the model, git branch, and more.
