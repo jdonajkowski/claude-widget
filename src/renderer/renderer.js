@@ -92,6 +92,17 @@
   widget.rail.onState(({ collapsed, width }) => rail.setCollapsed(collapsed, width));
   $('btn-rail').onclick = () => widget.rail.toggle();
 
+  // The gremlin peeking up over the ledge at the bottom of the project list. It ducks when the mouse comes
+  // near and peeks back up a moment later.
+  const mascot = $('mascot');
+  let duckTimer;
+  document.body.classList.toggle('no-mascot', cfg.showMascot === false);
+  mascot.addEventListener('mouseenter', () => {
+    mascot.classList.add('ducking');
+    clearTimeout(duckTimer);
+    duckTimer = setTimeout(() => mascot.classList.remove('ducking'), 1600);
+  });
+
   // --- Files pane ---------------------------------------------------------
   const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
   $('btn-files').onclick = () => { filesPane.toggle(); terminals.focus(); };
@@ -716,9 +727,10 @@
     toast(on ? 'Pinned on top' : 'Unpinned');
   };
   $('btn-settings').onclick = () => widget.openConfig();
-  widget.onConfigChanged(({ alwaysOnTop, showSysmon: sm }) => {
+  widget.onConfigChanged(({ alwaysOnTop, showSysmon: sm, showMascot }) => {
     pinBtn.classList.toggle('on', alwaysOnTop);
     if (sm !== undefined) { showSysmon = sm; sysEl.hidden = !sm; updateSide(); }
+    if (showMascot !== undefined) document.body.classList.toggle('no-mascot', !showMascot);
   });
 
   // --- Small prompt (worktree branch name) -------------------------------------

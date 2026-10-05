@@ -46,7 +46,7 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 
 ## Features
 
-- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle
+- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle. At the bottom, the Gremlin peeks up over a ledge (it ducks if you get close; `showMascot` turns it off)
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
@@ -122,6 +122,7 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `claudeHooks` | `true` | Pass Gremlin's hooks and status line to each session (see below) |
 | `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
 | `showSysmon` | `true` | CPU, temperature, memory, GPU, VRAM and disk in the side panel |
+| `showMascot` | `true` | The Gremlin peeking up at the bottom of the project list |
 | `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
 | `browserControl` | `true` | Let sessions drive the built-in browser with `gremlin-browser` (takes effect after a restart) |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |
@@ -239,7 +240,7 @@ hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, r
 bin/                     gremlin-open and gremlin-browser (sh, .cmd, .ps1; gremlin-browser.js is the client), on PATH in Gremlin sessions; widget-open and widget-browser are the old names, kept as aliases
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
-scripts/render-icons.js  Builds assets/logo.png, icon.png and icon.ico from assets/logo-source.png (npx electron scripts/render-icons.js)
+scripts/render-icons.js  Builds assets/logo.png, icon.png, icon.ico (from logo-source.png) and peek.png (from peek-source.png): npx electron scripts/render-icons.js
 test/                    Unit tests (npm test)
 assets/                  The logo artwork (logo-source.png), the trimmed logo and the app and tray icons made from it
 backup/                  Source before the progress-bar patch, and a snapshot of a working config

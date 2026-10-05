@@ -55,6 +55,7 @@ function normalize(form, defaults) {
   if ('claudeHooks' in f) values.claudeHooks = !!f.claudeHooks;
   if ('fontFamily' in f) values.fontFamily = str(f.fontFamily) || defaults.fontFamily;
   if ('showSysmon' in f) values.showSysmon = !!f.showSysmon;
+  if ('showMascot' in f) values.showMascot = !!f.showMascot;
   if ('autoOpenDevServer' in f) values.autoOpenDevServer = !!f.autoOpenDevServer;
   if ('browserControl' in f) values.browserControl = !!f.browserControl;
   if ('guardMode' in f) {

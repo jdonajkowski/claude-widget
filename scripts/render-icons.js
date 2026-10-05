@@ -1,7 +1,8 @@
-// Builds the logo and app icons from assets/logo-source.png (the Gremlin logo artwork):
-//   assets/logo.png   the logo with its empty margins trimmed (README)
-//   assets/icon.png   512 px square app icon (Linux, window icons)
-//   assets/icon.ico   16-256 px (Windows: taskbar, tray, installer)
+// Builds the logo, app icons and sidebar mascot from the artwork in assets/:
+//   logo-source.png -> logo.png   the logo with its empty margins trimmed (README)
+//                   -> icon.png   512 px square app icon (Linux, window icons)
+//                   -> icon.ico   16-256 px (Windows: taskbar, tray, installer)
+//   peek-source.png -> peek.png   the gremlin peeking up at the bottom of the project list, 360 px wide
 // The square icon crops the gremlin close and scales it up, over a terminal tile redrawn to match the
 // logo (grey frame, dark title bar with three dots, divider, >_), so it still reads at 16 px.
 // Run after changing the artwork:  npx electron scripts/render-icons.js
@@ -126,6 +127,32 @@ const SCALE = String.raw`(src, size) => new Promise((resolve) => {
   img.src = src;
 })`;
 
+// Runs in the page: trims a transparent PNG to its drawing and scales it to a width.
+const TRIM = String.raw`(src, width) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      if (d[(y * c.width + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    let w = x1 - x0 + 1, h = y1 - y0 + 1;
+    let from = document.createElement('canvas'); from.width = w; from.height = h;
+    from.getContext('2d').drawImage(c, x0, y0, w, h, 0, 0, w, h);
+    while (w / 2 >= width) {
+      const n = document.createElement('canvas'); n.width = Math.round(w / 2); n.height = Math.round(h / 2);
+      const nc = n.getContext('2d'); nc.imageSmoothingQuality = 'high'; nc.drawImage(from, 0, 0, n.width, n.height);
+      from = n; w = n.width; h = n.height;
+    }
+    const o = document.createElement('canvas'); o.width = width; o.height = Math.round(h * width / w);
+    const oc = o.getContext('2d'); oc.imageSmoothingQuality = 'high'; oc.drawImage(from, 0, 0, o.width, o.height);
+    resolve(o.toDataURL('image/png').split(',')[1]);
+  };
+  img.src = src;
+})`;
+
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, webPreferences: { offscreen: true } });
   await win.loadURL('data:text/html,<body></body>');
@@ -138,6 +165,8 @@ app.whenReady().then(async () => {
   for (const size of ICO_SIZES) pngs.push({ size, data: Buffer.from(await run(SCALE, iconUrl, size), 'base64') });
   fs.writeFileSync(path.join(ASSETS, 'icon.ico'), ico(pngs));
   fs.writeFileSync(path.join(ASSETS, 'icon.png'), Buffer.from(await run(SCALE, iconUrl, 512), 'base64'));
-  console.log('Wrote assets/logo.png, assets/icon.png and assets/icon.ico');
+  const peek = `data:image/png;base64,${fs.readFileSync(path.join(ASSETS, 'peek-source.png')).toString('base64')}`;
+  fs.writeFileSync(path.join(ASSETS, 'peek.png'), Buffer.from(await run(TRIM, peek, 360), 'base64'));
+  console.log('Wrote assets/logo.png, icon.png, icon.ico and peek.png');
   app.exit(0);
 }).catch((err) => { console.error(err); app.exit(1); });

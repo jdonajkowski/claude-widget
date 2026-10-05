@@ -34,6 +34,7 @@
       <label>Before system changes<span class="hint">Registry, services, boot, power, packages, kernel settings, files under /etc or C:\Windows. Undo steps are kept in Workbench → Changes. New sessions pick this up</span>
         <select name="guardMode"><option value="ask">Claude asks first (recommended)</option><option value="log">Only log them, with their undo</option><option value="off">Off</option></select></label>
       <label class="check"><input type="checkbox" name="showSysmon"> Show CPU, memory and GPU in the side panel</label>
+      <label class="check"><input type="checkbox" name="showMascot"> Show the Gremlin peeking up at the bottom of the project list</label>
       <label class="check"><input type="checkbox" name="autoOpenDevServer"> Open dev servers started from the Run menu in the built-in browser</label>
       <label class="check"><input type="checkbox" name="browserControl"> Let Claude drive the built-in browser (gremlin-browser: screenshots, clicks, console, DevTools Protocol). Applies after a restart</label>
 

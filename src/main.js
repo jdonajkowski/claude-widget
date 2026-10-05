@@ -50,6 +50,8 @@ const DEFAULT_CONFIG = {
   guardMode: 'ask',
   // CPU, memory, GPU and temperature strip in the side panel.
   showSysmon: true,
+  // The gremlin peeking up at the bottom of the project list
+  showMascot: true,
   // Open the URL a Run-menu dev server prints in the built-in browser.
   autoOpenDevServer: true,
   // widget-browser (bin/): sessions may drive the built-in browser's page (src/browser-control.js)
@@ -1075,7 +1077,7 @@ ipcMain.handle('settings:save', (_e, formValues) => {
   writeJson(statePath, state);
   if (before.hotkey !== config.hotkey && !registerHotkey(config.hotkey)) warnings.push(`Hotkey ${config.hotkey} is taken or invalid`);
   watchSysmon();
-  send('config:changed', { alwaysOnTop: state.alwaysOnTop, showSysmon: config.showSysmon !== false });
+  send('config:changed', { alwaysOnTop: state.alwaysOnTop, showSysmon: config.showSysmon !== false, showMascot: config.showMascot !== false });
   return { form: effectiveSettings(), restart, errors: warnings };
 });
 
@@ -1084,7 +1086,7 @@ function setConfig(values) {
   writeJson(configPath, { ...raw, ...values });
   config = loadConfig();
   watchSysmon();
-  send('config:changed', { alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop, showSysmon: config.showSysmon !== false });
+  send('config:changed', { alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop, showSysmon: config.showSysmon !== false, showMascot: config.showMascot !== false });
   return { ok: true };
 }
 
@@ -1336,6 +1338,7 @@ ipcMain.handle('config:get', () => ({
   filesOpen: !!state.filesOpen,
   sideCollapsed: !!state.sideCollapsed,
   showSysmon: config.showSysmon !== false,
+  showMascot: config.showMascot !== false,
   isWin
 }));
 ipcMain.on('side:setCollapsed', (_e, collapsed) => {
