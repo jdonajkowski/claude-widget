@@ -35,8 +35,16 @@
         <div id="files-list"></div>
       </aside>
       <main id="center">
-        <div id="tabs" hidden></div>
-        <div id="terminal"><div id="placeholder" hidden></div></div>
+        <div id="zone-a" class="zone">
+          <div id="tabs" class="tabs" hidden></div>
+          <div id="terminal" class="zhost"><div id="placeholder" hidden></div></div>
+        </div>
+        <div id="splitter" hidden title="Drag to resize"></div>
+        <div id="zone-b" class="zone" hidden>
+          <div id="tabs-b" class="tabs" hidden></div>
+          <div id="terminal-b" class="zhost"></div>
+        </div>
+        <div id="split-drop" hidden>Drop here to split</div>
       </main>
       <aside id="side" hidden>
         <div id="side-mini" title="Show panel (Ctrl+Shift+W)"><span class="chev">‹</span><span id="mini-count" class="idle"></span><span id="mini-turn"></span></div>
@@ -86,6 +94,7 @@
   <script src="../footer.js"></script>
   <script src="../md-links.js"></script>
   <script src="../session-state.js"></script>
+  <script src="../zones.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>
   <script src="files-pane.js"></script>

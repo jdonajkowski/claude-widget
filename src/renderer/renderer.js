@@ -1,4 +1,4 @@
-/* global WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -45,6 +45,7 @@
     cfg,
     host: $('terminal'),
     toast,
+    onFocus: (id) => focusTab(id),
     onInput: (id) => update(id, { t: 'input' }),
     onProgress: (id, state, value) => {
       if (isAux(id)) return;
@@ -151,54 +152,173 @@
     activeId = id;
     openIds.add(id);
     showPlaceholder('');
-    const view = viewOf.get(id);
-    if (view && view !== id && terminals.has(view)) terminals.show(view);
     update(id, { t: 'activate' });
     renderActive();
+    terminals.focus();
   }
 
   // --- Terminal tabs: the project's Claude session plus Run-menu tasks, terminals and admin shells ---
-  const tabsEl = $('tabs');
+  // Split view (src/zones.js) stacks two zones, each with its own tab strip; tabs move between them by
+  // dragging, Ctrl+Shift+M or the split button. Ctrl+Shift+\ splits and unsplits.
+  const Z = WidgetZones;
+  const hosts = [$('terminal'), $('terminal-b')];
+  const strips = [$('tabs'), $('tabs-b')];
+  const zoneEls = [$('zone-a'), $('zone-b')];
+  const splitterEl = $('splitter');
+  const dropEl = $('split-drop');
   let auxList = [];
-  const viewOf = new Map(); // project id -> terminal id in front
-  const shownView = () => (activeId && viewOf.get(activeId) && terminals.has(viewOf.get(activeId)) ? viewOf.get(activeId) : activeId);
+  const zoneState = new Map(); // project id -> zones state
+  const zst = () => zoneState.get(activeId) || Z.initial();
+  const setZst = (st) => { if (activeId) zoneState.set(activeId, st); };
+  const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id)].filter((id) => terminals.has(id)) : []);
+  const currentLayout = () => Z.layout(zst(), tabIds());
+  const shownView = () => currentLayout().focused || activeId;
+  let splitRatio = 0.6;
+  try { splitRatio = Math.min(0.85, Math.max(0.15, Number(localStorage.getItem('splitRatio')) || 0.6)); } catch { /* storage off */ }
 
   function showView(id) {
     if (!terminals.has(id)) return;
-    terminals.show(id);
-    viewOf.set(activeId, id);
-    renderTabs();
+    setZst(Z.show(zst(), tabIds(), id));
+    renderTabs(true);
   }
 
-  function renderTabs() {
-    const mine = auxList.filter((a) => a.projectId === activeId);
-    const view = shownView();
-    const front = mine.find((a) => a.id === view);
-    document.body.classList.toggle('admin-view', !!front && front.kind.startsWith('admin'));
-    tabsEl.hidden = !mine.length;
-    if (!mine.length) { tabsEl.replaceChildren(); return; }
-    const tabs = [{ id: activeId, title: 'Claude', kind: 'claude', running: true }, ...mine];
-    tabsEl.replaceChildren(...tabs.map((t) => {
-      const el = document.createElement('div');
-      el.className = `tab k-${t.kind}${t.id === view ? ' on' : ''}${t.running ? '' : ' exited'}`;
-      el.title = t.kind === 'admin' ? 'Administrator terminal' : t.kind === 'admin-claude' ? 'Claude running as administrator' : t.title;
-      const label = document.createElement('span');
-      label.className = 'tlabel';
-      label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
-      el.appendChild(label);
-      if (t.kind !== 'claude') {
-        const x = document.createElement('button');
-        x.className = 'tclose';
-        x.textContent = '×';
-        x.title = 'Close';
-        x.onclick = (e) => { e.stopPropagation(); widget.aux.close(t.id); };
-        el.appendChild(x);
-      }
-      el.onclick = () => { showView(t.id); terminals.focus(); };
-      el.onauxclick = (e) => { if (e.button === 1 && t.kind !== 'claude') widget.aux.close(t.id); };
-      return el;
-    }));
+  // A click into a terminal: its zone becomes the focused one.
+  function focusTab(id) {
+    if (!tabIds().includes(id)) return;
+    const L = currentLayout();
+    if (L.focused === id) return;
+    setZst(Z.show(zst(), tabIds(), id));
+    renderStrips(currentLayout());
   }
+
+  function moveTab(id, zone) {
+    setZst(Z.moveTo(zst(), tabIds(), id, zone));
+    renderTabs(true);
+  }
+
+  function toggleSplit() {
+    const ids = tabIds();
+    if (currentLayout().split) {
+      setZst(Z.unsplit(zst(), ids));
+      return renderTabs(true);
+    }
+    const pick = Z.splitCandidate(zst(), ids);
+    if (pick) return moveTab(pick, 1);
+    widget.aux.newShell(activeId); // arrives through aux:select with zone 1
+  }
+
+  const tabInfo = (id) => (id === activeId ? { id, title: 'Claude', kind: 'claude', running: true } : auxList.find((a) => a.id === id));
+
+  function makeTab(t, on) {
+    const el = document.createElement('div');
+    el.className = `tab k-${t.kind}${on ? ' on' : ''}${t.running ? '' : ' exited'}`;
+    el.title = t.kind === 'admin' ? 'Administrator terminal' : t.kind === 'admin-claude' ? 'Claude running as administrator' : `${t.title} (drag to the other zone to split)`;
+    el.draggable = true;
+    const label = document.createElement('span');
+    label.className = 'tlabel';
+    label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
+    el.appendChild(label);
+    if (t.kind !== 'claude') {
+      const x = document.createElement('button');
+      x.className = 'tclose';
+      x.textContent = '×';
+      x.title = 'Close';
+      x.onclick = (e) => { e.stopPropagation(); widget.aux.close(t.id); };
+      el.appendChild(x);
+    }
+    el.onclick = () => showView(t.id);
+    el.onauxclick = (e) => { if (e.button === 1 && t.kind !== 'claude') widget.aux.close(t.id); };
+    el.ondragstart = (e) => {
+      e.dataTransfer.setData('application/x-widget-tab', t.id);
+      e.dataTransfer.effectAllowed = 'move';
+      document.body.classList.add('dragging-tab');
+      dropEl.hidden = currentLayout().split;
+    };
+    el.ondragend = () => { document.body.classList.remove('dragging-tab'); dropEl.hidden = true; };
+    return el;
+  }
+
+  function splitButton(split) {
+    const b = document.createElement('button');
+    b.className = 'tsplit';
+    b.textContent = split ? '▭' : '⬓';
+    b.title = split ? 'Back to one zone (Ctrl+Shift+\\)' : 'Split into two zones (Ctrl+Shift+\\)';
+    b.onclick = () => toggleSplit();
+    return b;
+  }
+
+  function renderStrips(L) {
+    const multi = tabIds().length > 1;
+    strips.forEach((strip, z) => {
+      const ids = L.zones[z];
+      strip.hidden = z === 1 ? !L.split : !multi && !L.split;
+      strip.classList.toggle('focused', L.split && L.focus === z);
+      if (strip.hidden) { strip.replaceChildren(); return; }
+      strip.replaceChildren(...ids.map((id) => makeTab(tabInfo(id), id === L.front[z])));
+      if (z === 0) strip.appendChild(splitButton(L.split));
+    });
+    const front = L.focused && auxList.find((a) => a.id === L.focused);
+    document.body.classList.toggle('admin-view', !!front && front.kind.startsWith('admin'));
+  }
+
+  // Lays out the active project's tabs: each terminal into its zone, the front one of each zone shown.
+  function renderTabs(focus = false) {
+    const L = currentLayout();
+    zoneEls[1].hidden = !L.split;
+    splitterEl.hidden = !L.split;
+    zoneEls[0].style.flex = L.split ? `${splitRatio} 1 0` : '';
+    zoneEls[1].style.flex = L.split ? `${1 - splitRatio} 1 0` : '';
+    L.zones.forEach((ids, z) => ids.forEach((id) => terminals.place(id, hosts[z])));
+    if (activeId && terminals.has(activeId)) {
+      terminals.showOnly(L.front.filter(Boolean), L.focused);
+      if (focus) terminals.focus();
+    }
+    renderStrips(L);
+  }
+
+  // Dropping a tab on a zone (its strip or terminal) moves it there; on the drop area below, splits.
+  const dropTargets = [[zoneEls[0], 0], [zoneEls[1], 1], [dropEl, 1]];
+  for (const [el, zone] of dropTargets) {
+    el.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('application/x-widget-tab')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drop-over');
+    });
+    el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-over'); });
+    el.addEventListener('drop', (e) => {
+      const id = e.dataTransfer.getData('application/x-widget-tab');
+      el.classList.remove('drop-over');
+      document.body.classList.remove('dragging-tab');
+      dropEl.hidden = true;
+      if (!id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Dropped on the top zone while unsplit: nothing to do.
+      if (zone === 0 && !currentLayout().split) return;
+      moveTab(id, zone);
+    });
+  }
+
+  // Dragging the bar between the zones sets their heights.
+  splitterEl.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    splitterEl.setPointerCapture(e.pointerId);
+    const box = $('center').getBoundingClientRect();
+    const onMove = (ev) => {
+      splitRatio = Math.min(0.85, Math.max(0.15, (ev.clientY - box.top) / box.height));
+      zoneEls[0].style.flex = `${splitRatio} 1 0`;
+      zoneEls[1].style.flex = `${1 - splitRatio} 1 0`;
+    };
+    const onUp = () => {
+      splitterEl.removeEventListener('pointermove', onMove);
+      splitterEl.removeEventListener('pointerup', onUp);
+      try { localStorage.setItem('splitRatio', String(splitRatio)); } catch { /* storage off */ }
+      terminals.fitActive();
+    };
+    splitterEl.addEventListener('pointermove', onMove);
+    splitterEl.addEventListener('pointerup', onUp);
+  });
 
   function applyAux(list) {
     const ids = new Set(list.map((a) => a.id));
@@ -206,18 +326,18 @@
     for (const a of list) if (!terminals.has(a.id)) terminals.create(a.id);
     auxList = list;
     renderJobs();
-    for (const [p, v] of viewOf) if (isAux(v) && !ids.has(v)) viewOf.delete(p);
-    // A closed tab that was in front: show the project's Claude session again.
-    if (activeId && terminals.has(shownView())) {
-      const t = terminals.get(shownView());
-      if (t.el.hidden) terminals.show(shownView());
+    // A closed tab leaves its zone; a zone left empty merges back into one.
+    for (const [p, st] of zoneState) {
+      const pids = [p, ...list.filter((a) => a.projectId === p).map((a) => a.id)];
+      zoneState.set(p, Z.normalize(st, pids));
     }
     renderTabs();
   }
   widget.aux.onList(applyAux);
-  widget.aux.onSelect(async ({ id, projectId }) => {
+  widget.aux.onSelect(async ({ id, projectId, zone }) => {
     if (projectId !== activeId) await activate(projectId);
     if (!terminals.has(id)) applyAux(await widget.aux.get());
+    if (zone === 1 && id !== activeId) return moveTab(id, 1);
     showView(id);
   });
 
@@ -526,10 +646,12 @@
 
   // Debounced so a burst of size changes (window drag, rail or worker panel opening) resizes the PTY once.
   let fitTimer;
-  new ResizeObserver(() => {
+  const fitObserver = new ResizeObserver(() => {
     clearTimeout(fitTimer);
     fitTimer = setTimeout(() => terminals.fitActive(), 60);
-  }).observe($('terminal'));
+  });
+  fitObserver.observe($('terminal'));
+  fitObserver.observe($('terminal-b'));
 
   // --- Keyboard (caught before xterm): Ctrl+1…9, Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+Shift+B, Ctrl+Shift+E, Ctrl+Shift+W ---
   // The rail toggle is Ctrl+Shift+B, not Ctrl+B: Claude Code uses Ctrl+B to background a running command.
@@ -562,10 +684,19 @@
       widget.workbench.open();
     } else if (e.ctrlKey && !e.altKey && (e.key === 'PageDown' || e.key === 'PageUp') && activeId) {
       handled();
-      const ids = [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id)];
+      // Cycles the tabs of the focused zone.
+      const L = currentLayout();
+      const ids = L.zones[L.focus];
       if (ids.length < 2) return;
-      const i = ids.indexOf(shownView());
+      const i = ids.indexOf(L.focused);
       showView(ids[(i + (e.key === 'PageDown' ? 1 : -1) + ids.length) % ids.length]);
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.code === 'Backslash' && activeId) {
+      handled();
+      toggleSplit();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'm' && activeId) {
+      handled();
+      const L = currentLayout();
+      if (L.focused) moveTab(L.focused, L.split ? 1 - L.focus : 1);
     } else if (e.key === 'Enter' && !placeholderEl.hidden && activeId && !terminals.has(activeId)) {
       handled();
       activate(activeId);

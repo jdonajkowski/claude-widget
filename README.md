@@ -46,17 +46,18 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
-- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Pages run sandboxed, with no permissions (camera, location, …) and their own storage
+- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Claude (or you) can open a page here from any widget session or terminal tab with `widget-open <file-or-url>`, e.g. `widget-open mockups/login.html`. Pages run sandboxed, with no permissions (camera, location, …) and their own storage
 - **Markdown popouts:** click a `.md` path in the terminal to open it rendered (live-reloads on save). Paths relative to a subfolder, bare file names, a trailing period and OSC 8 links all work. **Edit** opens the file in the editor
 - **Settings window:** every setting in a form (gear button), plus **Global instructions**, an editor for the `AGENTS.md` Claude follows in every project
-- **Status panel** (right): worker rows for subagents and background shells, model, cost, context use, 5-hour/7-day limits, git branch and changes, and a turn timer. It collapses to a slim strip
+- **Status panel** (right): worker rows for subagents and background shells, then progress bars: Claude's task list (done / total, with the task in progress), a running benchmark, and the project's Run-menu tasks (running, passed, failed; click one to show its tab). Below them CPU, CPU temperature, memory, GPU, VRAM and disk, and at the bottom the model, cost, context use, 5-hour and 7-day limits with a bar for time through the 5-hour window (usage ahead of it means you'll hit the limit before it resets), git branch and changes, and a turn timer. It collapses to a slim strip
 - Terminal progress bar under the title bar and on the taskbar icon (Claude Code's OSC 9;4 progress)
 - Global hotkey to show/hide (default `Ctrl+Alt+Space`), tray icon, pin on top, adjustable opacity, Windows 11 acrylic/mica backdrop
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
 
 ### For coding
 
-- **Run button (▶):** lists the project's tasks (package.json scripts with npm/pnpm/yarn/bun, Makefile and justfile targets, Cargo, Go, Python, .NET, Gradle, Maven, CMake, Deno, Composer, Docker Compose) and runs one in a **terminal tab** above the terminal. When a dev server prints its URL (`http://localhost:5173`), it opens in the built-in browser. **New terminal** opens a plain shell tab. Tabs close with ×, restart with Enter after they exit
+- **Run button (▶):** a dropdown per toolchain the project uses (npm/pnpm/yarn/bun, SPFx, C# / .NET, Python, Deno, make, just, Cargo, Go, Gradle, Maven, CMake, Composer, Docker Compose), each split into **Run**, **Test**, **Package** and **Setup**. You get the project's own scripts plus the usual commands: `npm pack`/`audit`/`outdated`; SPFx `gulp serve`, `bundle --ship` + `package-solution --ship`, `trust-dev-cert` (or the Heft equivalents from SPFx 1.22); `dotnet run`/`watch`/`test`/`publish`/`pack` (each app project of a solution); Python run, pytest/unittest, `build`, venv and installs (using `.venv` or `uv` when present). A task runs in a **terminal tab** above the terminal. When a dev server prints its URL (`http://localhost:5173`), it opens in the built-in browser. **New terminal** opens a plain shell tab. Tabs close with ×, restart with Enter after they exit
+- **Split view:** two zones stacked, each with its own tabs. Drag a tab onto the bottom half (or press `Ctrl+Shift+\` or the ⬓ button at the end of the tabs) to split; drag tabs between the zones, or `Ctrl+Shift+M` to move the focused one across. Drag the bar between them to resize. Closing or moving out the last tab of a zone joins them again. Each project keeps its own split
 - **Git panel** (Workbench → Git): staged and unstaged files, a side-by-side (or inline) diff of what changed, stage / unstage / discard per file or all, commit (Ctrl+Enter; with nothing staged it commits everything), amend, push, pull, history. **✨ Suggest** asks Claude (`claude -p`) to write the commit message from the diff
 - **Git badges** in the files pane: M modified, N new, A added, D deleted, R renamed, U conflict, and a dot on folders with changes
 - **Project search:** the box at the top of the files pane (`Ctrl+Shift+F`) searches file names and contents (plain text, `.*` regex, `Aa` match case), skipping `node_modules`, build output and binaries. Click a hit to open the editor at that line
@@ -89,7 +90,9 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 | Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
 | Search the project | `Ctrl+Shift+F` (`Esc` clears) |
 | Open the Workbench | `Ctrl+Shift+G`, or the title-bar grid button |
-| Next / previous terminal tab | `Ctrl+PageDown` / `Ctrl+PageUp` |
+| Next / previous terminal tab (in the focused zone) | `Ctrl+PageDown` / `Ctrl+PageUp` |
+| Split into two zones / join them | `Ctrl+Shift+\` |
+| Move the focused tab to the other zone | `Ctrl+Shift+M`, or drag the tab |
 | Collapse / expand the right panel | `Ctrl+Shift+W`, the › button in its header, or click the collapsed strip |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Maximize / restore | Title-bar □ button, or double-click the title bar |
@@ -113,7 +116,7 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `claudeConfigDir` | `~/Projects/.claude` | Claude Code's config folder for widget sessions (`CLAUDE_CONFIG_DIR`). Empty: `~/.claude` |
 | `claudeHooks` | `true` | Pass the widget's hooks and status line to each session (see below) |
 | `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
-| `showSysmon` | `true` | CPU, memory and GPU in the side panel |
+| `showSysmon` | `true` | CPU, temperature, memory, GPU, VRAM and disk in the side panel |
 | `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |
 | `cwd` | home folder | Project to open at launch when no project was open last time, if it is in the list |
@@ -137,6 +140,8 @@ Window position, pin state, opacity, the open/collapsed state of each pane and t
 Worker rows, the "needs you" dot and most of the status footer come from Claude Code hooks (`hooks/workers-hook.js`) and a status line wrapper (`hooks/statusline-tee.js`). With `claudeHooks` on, the widget hands them to each session it starts with `claude --settings`, so `settings.json` needs nothing added. The wrapper runs your own status line command (from `settings.json`) and passes its output through, so your status line looks the same.
 
 The scripts run on Node.js when it's on `PATH`, otherwise on the widget's own runtime (`ELECTRON_RUN_AS_NODE`), through bash on Linux or Git Bash, or PowerShell on Windows without Git Bash. If `settings.json` already has the widget's hooks or wrapper (the manual setup of older versions), the widget uses those and doesn't add its own. Hooks only act inside the widget: they check `CLAUDE_WIDGET_WORKERS` and `CLAUDE_WIDGET_STATUS`, which only widget sessions have.
+
+The same hook also follows Claude's task list (TaskCreate / TaskUpdate, or TodoWrite) for the tasks progress bar. If `settings.json` has the widget hooks from an older manual setup, the widget adds only the matchers missing there.
 
 Only permission prompts and questions turn the dot to "needs you" (`notification_type` `permission_prompt` / `elicitation_dialog`), not the idle reminder after each turn. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds.
 
@@ -200,7 +205,8 @@ src/files.js             Files pane: folder listing, open actions, Markdown look
 src/browser-window.js    Built-in browser window; src/browser-url.js turns typed text into URLs
 src/projects.js          Project list (scan + pinned - hidden) and initials
 src/session-state.js     Reducer: per-session signals -> project dot
-src/workers.js           Reducer: hook events -> worker rows
+src/workers.js           Reducer: hook events -> worker rows and the task list progress
+src/zones.js             Split view: which tabs are in which zone
 src/log-tail.js          Tails the hook event log
 src/footer.js            Status footer formatting
 src/git-status.js        Git branch and changes for the footer
@@ -223,6 +229,7 @@ src/browser/             Browser toolbar
 src/md/                  Markdown popout window
 src/workbench/           Workbench window: Git, New project, Usage, Monitor, Changes, Logs
 hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, run by Claude Code
+bin/                     widget-open (sh, .cmd, .ps1): put on PATH in widget sessions, opens a page in the built-in browser
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
 test/                    Unit tests (npm test)

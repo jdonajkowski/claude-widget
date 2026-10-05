@@ -191,7 +191,8 @@ const aux = createAux({
 const auxEnv = () => ({ ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...claudeEnv(), ...guardEnv(), ...openEnv(), ...config.env });
 
 // kind: task (runs command), shell, admin (elevated shell), admin-claude (elevated Claude session, Windows).
-function openAux(projectId, { kind, title, command }) {
+// zone 1: show it in the bottom zone of a split view.
+function openAux(projectId, { kind, title, command, zone = 0 }) {
   const cwd = projectPath(projectId);
   if (!cwd || !fs.existsSync(cwd)) { send('toast', 'Open a project first'); return null; }
   let launchSpec;
@@ -207,7 +208,7 @@ function openAux(projectId, { kind, title, command }) {
   }
   const id = aux.open({ projectId, cwd, title, kind, launch: launchSpec, env: auxEnv(), elevated }, 100, 30);
   if (win) { win.show(); win.focus(); }
-  send('aux:select', { id, projectId });
+  send('aux:select', { id, projectId, zone });
   return id;
 }
 const startTask = (projectId, t) => openAux(projectId, { kind: 'task', title: t.label, command: t.command });
@@ -488,23 +489,34 @@ ipcMain.on('pty:resize', (_e, { id, cols, rows }) => (aux.has(id) ? aux.resize(i
 ipcMain.on('pty:restart', (_e, { id, cols, rows }) => (aux.has(id) ? aux.restart(id, cols, rows) : sessions.restart(id, cols, rows)));
 ipcMain.on('session:close', (_e, { id }) => (aux.has(id) ? aux.close(id) : closeSession(id)));
 ipcMain.handle('aux:get', () => aux.list());
+// Split view with only the Claude tab: a new terminal for the bottom zone.
+ipcMain.on('aux:newShell', (_e, projectId) => { if (projectPath(projectId)) openAux(projectId, { kind: 'shell', title: 'Terminal', zone: 1 }); });
 
 // The run button: the project's tasks (src/tasks.js) and a new terminal.
 ipcMain.on('run:menu', () => {
   const id = activeId;
   const root = projectPath(id);
   if (!root || !win) return;
-  const list = tasks.detectTasks(root, { isWin });
-  const items = [];
-  const groups = [...new Set(list.map((t) => t.group))];
-  for (const g of groups) {
-    const inGroup = list.filter((t) => t.group === g).map((t) => ({ label: t.label, sublabel: t.command, click: () => startTask(id, t) }));
-    if (groups.length > 1 && inGroup.length > 6) items.push({ label: g, submenu: inGroup });
-    else items.push({ label: g, enabled: false }, ...inGroup);
-    items.push({ type: 'separator' });
-  }
-  if (!list.length) items.push({ label: 'No tasks found in this project', enabled: false }, { type: 'separator' });
+  const ps = /(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(config.shell || (isWin ? 'powershell.exe' : ''));
+  const list = tasks.detectTasks(root, { isWin, ps });
+  // One dropdown per toolchain (npm, SPFx, C# / .NET, Python, ...), with Run / Test / Package / Setup inside.
+  const item = (t) => ({ label: t.label, sublabel: t.command, toolTip: t.command, click: () => startTask(id, t) });
+  const items = [...new Set(list.map((t) => t.group))].map((g) => {
+    const inGroup = list.filter((t) => t.group === g);
+    const sub = inGroup.filter((t) => t.first).map((t) => ({ ...item(t), label: `${t.label} (needed first)` }));
+    for (const s of tasks.SECTIONS) {
+      const inSection = inGroup.filter((t) => t.section === s && !t.first);
+      if (!inSection.length) continue;
+      if (sub.length) sub.push({ type: 'separator' });
+      if (s === 'scripts' && inSection.length > 10) sub.push({ label: tasks.SECTION_LABELS[s], submenu: inSection.map(item) });
+      else sub.push({ label: tasks.SECTION_LABELS[s], enabled: false }, ...inSection.map(item));
+    }
+    return { label: tasks.GROUP_LABELS[g] || g, submenu: sub };
+  });
+  if (!list.length) items.push({ label: 'No tasks found in this project', enabled: false });
+  items.push({ type: 'separator' });
   items.push({ label: 'New terminal', click: () => openAux(id, { kind: 'shell', title: 'Terminal' }) });
+  items.push({ label: 'New terminal below (split)', accelerator: 'Ctrl+Shift+\\', registerAccelerator: false, click: () => openAux(id, { kind: 'shell', title: 'Terminal', zone: 1 }) });
   Menu.buildFromTemplate(items).popup({ window: win });
 });
 

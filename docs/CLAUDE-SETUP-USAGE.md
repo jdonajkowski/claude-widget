@@ -12,7 +12,11 @@ The title bar has these buttons after the folder and globe: **▶ Run**, **⛨ s
 
 | To… | Do this |
 |---|---|
-| Run a script, test or dev server | **▶** → pick a task (npm/pnpm/yarn scripts, make, just, cargo, go, python, dotnet, gradle, maven, cmake, docker compose). It runs in a tab above the terminal. A dev server's `localhost` URL opens in the built-in browser by itself |
+| Run a script, test, build or package | **▶** → the dropdown for the toolchain (**npm**, **SPFx**, **C# / .NET**, **Python**, and others the project uses) → **Run**, **Test**, **Package** or **Setup**. E.g. SPFx → Package → *bundle + package-solution (ship)*; C# → Package → *publish (Release)*; Python → Setup → *create .venv*. It runs in a tab above the terminal. A dev server's `localhost` URL opens in the built-in browser by itself |
+| See two terminals at once | Drag a tab onto the lower half of the terminal (or `Ctrl+Shift+\`, or the ⬓ button right of the tabs). Drag tabs between the two zones, or `Ctrl+Shift+M` to move the focused one. Drag the bar between them to resize. **▶** → *New terminal below* opens a shell straight into the lower zone |
+| Show a mockup or demo | Ask Claude for it; the global `AGENTS.md` tells Claude to open it in the built-in browser with `widget-open <file-or-url>`. You can run `widget-open` yourself in any widget tab too |
+| Follow a long job | The right panel shows Claude's task list (*3/7* and the current task), a running benchmark, and each Run task (orange = running, green = passed, red = failed; click to see it) |
+| Watch your usage limits | Right panel, bottom: **5h** and **7d** bars, and **time** = how far through the 5-hour window you are. If 5h runs ahead of time, you'll hit the limit before it resets |
 | Open a plain terminal in the project | **▶** → New terminal |
 | Switch between Claude and the other tabs | Click the tab, or `Ctrl+PageUp` / `Ctrl+PageDown`. Close with × (or middle-click). After a task exits, Enter runs it again |
 | See what changed in git | The files pane marks changed files: **M** modified, **N** new, **A** added, **D** deleted, **R** renamed, **U** conflict, a dot on folders with changes |
@@ -37,7 +41,7 @@ Suggested routine:
 | To… | Do this |
 |---|---|
 | Change how the safety net behaves | Shield menu → *Before system changes*: **Ask first** (default), **Only log them** (no prompt, undo still recorded), **Off**. Also in Settings → General. Restart a session (↻) to apply it there |
-| Watch CPU, memory, GPU | The side panel shows them live; click it (or Workbench → **Monitor & snapshots**) for graphs, per-core load, VRAM, GPU power and disk space. For CPU temperature on Windows, run [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) |
+| Watch CPU, memory, GPU | The side panel shows CPU, temperature (when available), memory, GPU, VRAM and disk live; click it (or Workbench → **Monitor & snapshots**) for graphs, per-core load, VRAM, GPU power and disk space. For CPU temperature on Windows, run [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) |
 | Run something as administrator | Shield → **Admin terminal (UAC)**: a red tab with an elevated PowerShell. **Claude as administrator** runs Claude itself elevated, with the safety net still on. On Arch the shield gives a `sudo -s` root shell |
 | Find out what's going wrong | Workbench → **Logs**: errors (or warnings, or critical only) from the Event Log / journal for the last hour, day or week. Click a row to expand it. **Ask Claude** pastes it into the session as a question; review and press Enter. Tick *Follow* to refresh every 10 s |
 | Find the backups | Workbench → Changes → **Backups folder** (`Projects\.claude\widget\changes`): the change log, exported registry keys and copies of system files |
@@ -48,7 +52,9 @@ Suggested routine:
 |---|---|
 | `Ctrl+Shift+G` | Workbench |
 | `Ctrl+Shift+F` | Search the project |
-| `Ctrl+PageUp` / `Ctrl+PageDown` | Previous / next terminal tab |
+| `Ctrl+PageUp` / `Ctrl+PageDown` | Previous / next terminal tab (in the focused zone) |
+| `Ctrl+Shift+\` | Split into two zones / join them |
+| `Ctrl+Shift+M` | Move the focused tab to the other zone |
 | `Ctrl+Shift+E` | Files pane |
 | `Ctrl+Shift+B` | Project list |
 | `Ctrl+Shift+W` | Right panel |

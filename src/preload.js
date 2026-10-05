@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('widget', {
   aux: {
     get: () => ipcRenderer.invoke('aux:get'),
     close: (id) => ipcRenderer.send('session:close', { id }),
+    newShell: (projectId) => ipcRenderer.send('aux:newShell', projectId),
     onList: on('aux:list'),
     onSelect: on('aux:select')
   },

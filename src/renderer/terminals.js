@@ -1,8 +1,8 @@
 /* global Terminal, FitAddon, WebLinksAddon, WidgetMdLinks */
-// One xterm per session, each in its own <div> inside #terminal. Hidden terminals keep receiving output,
-// so switching back shows complete scrollback. Loaded as a plain script (window.WidgetTerminals).
+// One xterm per session, each in its own <div> inside a zone's host (#terminal, or #terminal-b in split view).
+// Hidden terminals keep receiving output, so switching back shows complete scrollback. Loaded as a plain script (window.WidgetTerminals).
 (function (root) {
-  function createTerminals({ widget, cfg, host, onProgress, onInput, toast }) {
+  function createTerminals({ widget, cfg, host, onProgress, onInput, toast, onFocus = () => {} }) {
     const terms = new Map();
     let activeId = null;
     let fontSize = cfg.fontSize;
@@ -38,6 +38,8 @@
       term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => widget.openExternal(url)));
       term.open(el);
       const t = { id, el, term, fit, exited: false };
+      // Clicking into a terminal of the other zone makes it the active one (keys, Ctrl+PageUp/Down).
+      el.addEventListener('focusin', () => { if (activeId !== id) { activeId = id; onFocus(id); } });
       terms.set(id, t);
 
       term.parser.registerOscHandler(9, (data) => {
@@ -160,9 +162,28 @@
       return t;
     }
 
+    // Split view: shows exactly these terminals (one per zone), each fitted to its zone, and focuses one.
+    function showOnly(ids, focusId) {
+      for (const x of terms.values()) x.el.hidden = !ids.includes(x.id);
+      for (const id of ids) {
+        const t = terms.get(id);
+        if (!t) continue;
+        try { t.fit.fit(); } catch { /* not laid out yet */ }
+        widget.pty.resize(id, t.term.cols, t.term.rows);
+      }
+      if (terms.has(focusId)) activeId = focusId; // focus() then puts the keyboard there
+    }
+
+    // Moves a terminal's element into a zone's host (it keeps its scrollback).
+    function place(id, hostEl) {
+      const t = terms.get(id);
+      if (t && t.el.parentNode !== hostEl) hostEl.appendChild(t.el);
+    }
+
+    // Every visible terminal (both zones in split view).
     function fitActive() {
-      const t = terms.get(activeId);
-      if (t) {
+      for (const t of terms.values()) {
+        if (t.el.hidden) continue;
         try { t.fit.fit(); } catch { /* not visible yet */ }
       }
     }
@@ -199,6 +220,8 @@
     return {
       create,
       show,
+      showOnly,
+      place,
       restart,
       markExited,
       destroy,
