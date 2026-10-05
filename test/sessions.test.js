@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { encodeHistoryDir, hasHistory, buildLaunch, sessionDir, createSessions } = require('../src/sessions');
+const { encodeHistoryDir, hasHistory, buildLaunch, sessionEnv, sessionDir, createSessions } = require('../src/sessions');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cw-sess-'));
 
@@ -163,4 +163,13 @@ test('a spawn failure reports an exit for that session', () => {
   assert.deepEqual(sent.map(([c]) => c), ['pty:data', 'pty:exit']);
   bad.write('a', 'x');
   assert.ok(m);
+});
+
+test('sessionEnv makes Claude report turn progress: ConEmuTask on, WT_SESSION off, config wins', () => {
+  const env = sessionEnv({ baseEnv: { PATH: 'p', WT_SESSION: 'x' }, extraEnv: { CLAUDE_CONFIG_DIR: 'c' }, configEnv: { A: '1' }, own: { GREMLIN_WORKERS: 'w' } });
+  assert.equal(env.ConEmuTask, 'gremlin');
+  assert.equal('WT_SESSION' in env, false);
+  assert.deepEqual([env.PATH, env.CLAUDE_CONFIG_DIR, env.A, env.GREMLIN_WORKERS, env.TERM], ['p', 'c', '1', 'w', 'xterm-256color']);
+  assert.equal(sessionEnv({ baseEnv: {}, configEnv: { ConEmuTask: 'claude-widget' } }).ConEmuTask, 'claude-widget');
+  assert.equal(sessionEnv({ baseEnv: { WT_SESSION: 'x' }, configEnv: { WT_SESSION: 'mine' } }).WT_SESSION, 'mine');
 });

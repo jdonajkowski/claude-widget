@@ -38,6 +38,15 @@ function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin, setting
   return { file: shell, args: isWin ? ['-NoLogo', '-NoExit', '-Command', command] : ['-lc', `${command}; exec $SHELL`] };
 }
 
+// Claude Code only reports turn progress (OSC 9;4) to terminals it recognises, and never while WT_SESSION is
+// set. Checked with 2.1.289 in a ConPTY: nothing without ConEmuTask, start/end with it. Without progress the
+// working dot, the progress bar and Glitch's thinking/working moods never start. config.env can override.
+function sessionEnv({ baseEnv, extraEnv = {}, configEnv = {}, own = {} }) {
+  const env = { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ConEmuTask: 'gremlin', ...extraEnv, ...configEnv, ...own };
+  if (!('WT_SESSION' in configEnv)) delete env.WT_SESSION;
+  return env;
+}
+
 function sessionDir(userDir, id) {
   return path.join(userDir, 'sessions', crypto.createHash('sha1').update(id).digest('hex').slice(0, 12));
 }
@@ -62,7 +71,7 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
         cols: cols || 100,
         rows: rows || 30,
         cwd: s.cwd,
-        env: { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...extraEnv(), ...config.env, GREMLIN_WORKERS: s.workersPath, GREMLIN_STATUS: s.statusPath },
+        env: sessionEnv({ baseEnv, extraEnv: extraEnv(), configEnv: config.env || {}, own: { GREMLIN_WORKERS: s.workersPath, GREMLIN_STATUS: s.statusPath } }),
         useConpty: isWin ? true : undefined
       });
     } catch (err) {
@@ -162,4 +171,4 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
   };
 }
 
-module.exports = { encodeHistoryDir, hasHistory, buildLaunch, sessionDir, createSessions };
+module.exports = { encodeHistoryDir, hasHistory, buildLaunch, sessionEnv, sessionDir, createSessions };

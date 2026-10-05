@@ -166,7 +166,7 @@ The list shows every subfolder of `projectsRoot` plus folders you pin from anywh
 
 ### Progress bar
 
-Claude Code only emits OSC 9;4 progress for terminals it recognises, and turns progress *off* when `WT_SESSION` is set. Make the session look like ConEmu instead in `config.json`: `"env": { "ConEmuTask": "gremlin" }`. Do not set `WT_SESSION`.
+Claude Code only emits OSC 9;4 progress for terminals it recognises, and turns progress *off* when `WT_SESSION` is set. Gremlin handles this for every session: it sets `ConEmuTask=gremlin` (Claude recognises ConEmu by it) and leaves `WT_SESSION` out, even when Gremlin itself was started from Windows Terminal. Without progress, the working dot, the progress bar and Glitch's thinking and working animations never start. Setting either variable in `config.json`'s `env` overrides this.
 
 ## Building
 
