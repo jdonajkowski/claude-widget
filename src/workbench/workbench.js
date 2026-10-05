@@ -74,7 +74,7 @@
     $('git-none').hidden = !none;
     document.querySelector('#git .bar').hidden = none;
     if (none) {
-      $('git-none').textContent = ctx.project ? `${ctx.project.name} is not a git repository. Ask Claude to run git init, or create projects from New project with Git on.` : 'Open a project in the widget first.';
+      $('git-none').textContent = ctx.project ? `${ctx.project.name} is not a git repository. Ask Claude to run git init, or create projects from New project with Git on.` : 'Open a project in Gremlin first.';
       return;
     }
     $('git-branch').textContent = git.branch || 'detached HEAD';
@@ -382,7 +382,7 @@
       $('m-disk-sub').textContent = `${s.disk.path} · ${gib(s.disk.total - s.disk.used)} free of ${gib(s.disk.total)}`;
     }
     $('m-temp-note').textContent = s.cpuTemp === null
-      ? (ctx.isWin ? 'CPU temperature: Windows only shares it with administrators or through LibreHardwareMonitor. Run LibreHardwareMonitor (with its WMI provider) and the widget picks it up.' : 'CPU temperature: no hwmon sensor found (k10temp, coretemp, zenpower).')
+      ? (ctx.isWin ? 'CPU temperature: Windows only shares it with administrators or through LibreHardwareMonitor. Run LibreHardwareMonitor (with its WMI provider) and Gremlin picks it up.' : 'CPU temperature: no hwmon sensor found (k10temp, coretemp, zenpower).')
       : '';
     spark($('c-cpu'), hist.cpu, '#d97757');
     spark($('c-mem'), hist.mem, '#57ab5a');

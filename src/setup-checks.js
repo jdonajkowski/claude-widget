@@ -12,7 +12,7 @@ const TOOLS = [
   {
     id: 'claude',
     name: 'Claude Code',
-    why: 'Runs in every widget session.',
+    why: 'Runs in every Gremlin session.',
     required: true,
     bins: { win: ['claude.exe', 'claude.cmd'], linux: ['claude'] },
     extraPaths: { win: ['.local/bin/claude.exe'], linux: ['.local/bin/claude'] },
@@ -36,7 +36,7 @@ const TOOLS = [
   {
     id: 'node',
     name: 'Node.js',
-    why: 'Optional: npx tools such as ccstatusline and many MCP servers need it. The widget itself does not.',
+    why: 'Optional: npx tools such as ccstatusline and many MCP servers need it. Gremlin itself does not.',
     bins: { win: ['node.exe'], linux: ['node'] },
     install: { win: 'winget install --id OpenJS.NodeJS.LTS -e --source winget', pkgs: { pacman: ['nodejs', 'npm'], apt: ['nodejs', 'npm'], dnf: ['nodejs', 'npm'] } }
   },

@@ -20,7 +20,7 @@ for tool in make g++ python3 bsdtar rsync; do
 done
 
 # Build in a Linux folder: a node_modules made on Windows holds Windows binaries (node-pty is native).
-work="${BUILD_DIR:-$HOME/.cache/claude-widget-build}"
+work="${BUILD_DIR:-$HOME/.cache/gremlin-desk-build}"
 mkdir -p "$work"
 rsync -a --delete --exclude node_modules --exclude dist --exclude .git "$src/" "$work/"
 cd "$work"

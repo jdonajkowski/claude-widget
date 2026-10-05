@@ -1,11 +1,3 @@
 #!/bin/sh
-# Shows a page, file or URL in Claude Widget's built-in browser: widget-open <url-or-file>
-# Works in sessions and terminal tabs started by the widget, which set CLAUDE_WIDGET_EXE.
-if [ -z "$1" ]; then echo "usage: widget-open <url-or-file>" >&2; exit 2; fi
-if [ -z "$CLAUDE_WIDGET_EXE" ]; then echo "widget-open: only works inside Claude Widget" >&2; exit 1; fi
-if [ -n "$CLAUDE_WIDGET_APP" ]; then
-  "$CLAUDE_WIDGET_EXE" "$CLAUDE_WIDGET_APP" "--open=$1" >/dev/null 2>&1 &
-else
-  "$CLAUDE_WIDGET_EXE" "--open=$1" >/dev/null 2>&1 &
-fi
-echo "Opened $1 in the widget's browser"
+# Old name of gremlin-open (the app was called Claude Widget), kept so existing instructions keep working.
+exec "$(dirname "$0")/gremlin-open" "$@"

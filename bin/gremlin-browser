@@ -1,0 +1,8 @@
+#!/bin/sh
+# Drives Gremlin's built-in browser: gremlin-browser help
+dir=$(dirname "$0")
+if command -v node >/dev/null 2>&1; then
+  exec node "$dir/gremlin-browser.js" "$@"
+fi
+if [ -z "$GREMLIN_EXE" ]; then echo "gremlin-browser: only works inside Gremlin" >&2; exit 1; fi
+ELECTRON_RUN_AS_NODE=1 exec "$GREMLIN_EXE" "$dir/gremlin-browser.js" "$@"

@@ -1,9 +1,9 @@
-// widget-browser: drives Claude Widget's built-in browser from a widget session (see src/browser-control.js).
-// Runs on Node or the widget's own runtime (ELECTRON_RUN_AS_NODE); the sh/.cmd/.ps1 wrappers pick one.
+// gremlin-browser: drives Gremlin's built-in browser from a Gremlin session (see src/browser-control.js).
+// Runs on Node or Gremlin's own runtime (ELECTRON_RUN_AS_NODE); the sh/.cmd/.ps1 wrappers pick one.
 const fs = require('fs');
 const http = require('http');
 
-const HELP = `widget-browser <command> [arguments]   Drives the Claude Widget built-in browser.
+const HELP = `gremlin-browser <command> [arguments]   Drives Gremlin's built-in browser.
 
   open <file-or-url>             Load a page and wait for it (relative paths are fine)
   status                         URL, title, viewport
@@ -25,7 +25,7 @@ const HELP = `widget-browser <command> [arguments]   Drives the Claude Widget bu
                                  e.g. cdp Emulation.setEmulatedMedia '{"media":"print"}'
 
   Windows PowerShell 5.1 drops double quotes inside arguments: pipe JSON or JavaScript in with -,
-  e.g. '{"media":"print"}' | widget-browser cdp Emulation.setEmulatedMedia -`;
+  e.g. '{"media":"print"}' | gremlin-browser cdp Emulation.setEmulatedMedia -`;
 
 function parse(argv) {
   const pos = [];
@@ -57,7 +57,7 @@ function body(cmd, pos, flags, { cwd, readFile, readStdin }) {
       let params = {};
       const raw = pos[1] === '-' ? readStdin() : flags.file ? readFile(flags.file) : pos.slice(1).join(' ');
       if (raw.trim()) {
-        try { params = JSON.parse(raw); } catch { throw new Error('cdp params must be JSON, e.g. \'{"media":"print"}\' (in PowerShell 5.1 pipe it in: \'{"media":"print"}\' | widget-browser cdp Emulation.setEmulatedMedia -)'); }
+        try { params = JSON.parse(raw); } catch { throw new Error('cdp params must be JSON, e.g. \'{"media":"print"}\' (in PowerShell 5.1 pipe it in: \'{"media":"print"}\' | gremlin-browser cdp Emulation.setEmulatedMedia -)'); }
       }
       return { method: pos[0], params };
     }
@@ -98,10 +98,10 @@ function post(base, token, cmd, payload) {
 async function main(argv) {
   const { cmd, pos, flags } = parse(argv);
   if (!cmd || cmd === 'help' || flags.help) { console.log(HELP); return 0; }
-  const base = process.env.CLAUDE_WIDGET_BROWSER;
-  const token = process.env.CLAUDE_WIDGET_BROWSER_TOKEN;
+  const base = process.env.GREMLIN_BROWSER;
+  const token = process.env.GREMLIN_BROWSER_TOKEN;
   if (!base || !token) {
-    console.error('widget-browser: only works in sessions and tabs started by Claude Widget (with "Let Claude drive the built-in browser" on in Settings).');
+    console.error('gremlin-browser: only works in sessions and tabs started by Gremlin (with "Let Claude drive the built-in browser" on in Settings).');
     return 1;
   }
   const payload = body(cmd, pos, flags, {
@@ -110,14 +110,14 @@ async function main(argv) {
     readStdin: () => fs.readFileSync(0, 'utf8')
   });
   const r = await post(base, token, cmd, payload);
-  if (r.error) { console.error(`widget-browser: ${r.error}`); return 1; }
+  if (r.error) { console.error(`gremlin-browser: ${r.error}`); return 1; }
   console.log(format(cmd, r));
   return 0;
 }
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (err) => {
-    console.error(`widget-browser: ${err.code === 'ECONNREFUSED' ? 'the widget is not running (restart this session after starting it)' : err.message}`);
+    console.error(`gremlin-browser: ${err.code === 'ECONNREFUSED' ? 'Gremlin is not running (restart this session after starting it)' : err.message}`);
     process.exitCode = 1;
   });
 }

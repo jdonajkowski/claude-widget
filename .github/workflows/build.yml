@@ -65,5 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "Claude Widget ${GITHUB_REF_NAME#v}" --generate-notes
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "Gremlin ${GITHUB_REF_NAME#v}" --generate-notes
           gh release upload "$GITHUB_REF_NAME" out/* -R "$GITHUB_REPOSITORY" --clobber

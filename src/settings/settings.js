@@ -142,7 +142,7 @@
     rows.push(checkRow({
       state: s.claudeSignedIn ? 'ok' : 'warn',
       title: s.claudeSignedIn ? 'Signed in to Claude' : 'Not signed in to Claude',
-      detail: `${s.claudeSignedIn ? 'Use /login in a session to switch accounts.' : 'Widget sessions sign in once; Claude Code asks the first time it runs.'}\nConfig folder: ${s.claudeDir}`,
+      detail: `${s.claudeSignedIn ? 'Use /login in a session to switch accounts.' : 'Gremlin sessions sign in once; Claude Code asks the first time it runs.'}\nConfig folder: ${s.claudeDir}`,
       buttons: s.claudeSignedIn ? [] : [{ label: 'Sign in', primary: true, disabled: !tool.claude.path, run: () => runStep('signin', 'claude', 'Claude sign-in') }]
     }));
 
@@ -176,8 +176,8 @@
     $('accounts').replaceChildren(...rows);
 
     $('hooks-info').textContent = s.globalHooks
-      ? 'Your ~/.claude/settings.json already has the widget hooks, so the widget uses those.'
-      : s.runtime === 'node' ? 'Hooks run on Node.js.' : 'Hooks run on the widget\'s built-in runtime (Node.js is not needed).';
+      ? 'Your ~/.claude/settings.json already has the Gremlin hooks, so Gremlin uses those.'
+      : s.runtime === 'node' ? 'Hooks run on Node.js.' : 'Hooks run on Gremlin\'s built-in runtime (Node.js is not needed).';
   }
   $('btn-recheck').onclick = () => loadSetup();
   $('btn-setup-done').onclick = () => { host.setup.done(); window.close(); };

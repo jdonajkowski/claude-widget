@@ -1,0 +1,11 @@
+#!/bin/sh
+# Shows a page, file or URL in Gremlin's built-in browser: gremlin-open <url-or-file>
+# Works in sessions and terminal tabs started by Gremlin, which set GREMLIN_EXE.
+if [ -z "$1" ]; then echo "usage: gremlin-open <url-or-file>" >&2; exit 2; fi
+if [ -z "$GREMLIN_EXE" ]; then echo "gremlin-open: only works inside Gremlin" >&2; exit 1; fi
+if [ -n "$GREMLIN_APP" ]; then
+  "$GREMLIN_EXE" "$GREMLIN_APP" "--open=$1" >/dev/null 2>&1 &
+else
+  "$GREMLIN_EXE" "--open=$1" >/dev/null 2>&1 &
+fi
+echo "Opened $1 in Gremlin's browser"

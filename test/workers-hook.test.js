@@ -53,7 +53,7 @@ test('unknown events and garbage -> nothing', () => {
 
 test('script appends lines when env var is set, prints nothing, exits 0', () => {
   const log = tmpLog();
-  const r = run(JSON.stringify({ hook_event_name: 'SubagentStart', agent_id: 'ag1', agent_type: 'Explore' }), { CLAUDE_WIDGET_WORKERS: log });
+  const r = run(JSON.stringify({ hook_event_name: 'SubagentStart', agent_id: 'ag1', agent_type: 'Explore' }), { GREMLIN_WORKERS: log });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
   assert.equal(r.stderr, '');
@@ -62,7 +62,7 @@ test('script appends lines when env var is set, prints nothing, exits 0', () => 
 
 test('script does nothing without the env var', () => {
   const env = { ...process.env };
-  delete env.CLAUDE_WIDGET_WORKERS;
+  delete env.GREMLIN_WORKERS;
   const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify({ hook_event_name: 'Stop' }), env, encoding: 'utf8' });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
@@ -71,7 +71,7 @@ test('script does nothing without the env var', () => {
 test('script survives empty and garbage stdin', () => {
   const log = tmpLog();
   for (const input of ['', 'not json', '{"hook_event_name":']) {
-    const r = run(input, { CLAUDE_WIDGET_WORKERS: log });
+    const r = run(input, { GREMLIN_WORKERS: log });
     assert.equal(r.status, 0);
     assert.equal(r.stdout + r.stderr, '');
   }
@@ -79,7 +79,7 @@ test('script survives empty and garbage stdin', () => {
 });
 
 test('script survives an unwritable log path', () => {
-  const r = run(JSON.stringify({ hook_event_name: 'Stop' }), { CLAUDE_WIDGET_WORKERS: path.join(os.tmpdir(), 'no-such-dir-cw', 'x', 'workers.jsonl') });
+  const r = run(JSON.stringify({ hook_event_name: 'Stop' }), { GREMLIN_WORKERS: path.join(os.tmpdir(), 'no-such-dir-cw', 'x', 'workers.jsonl') });
   assert.equal(r.status, 0);
   assert.equal(r.stdout + r.stderr, '');
 });
@@ -88,7 +88,7 @@ test('concurrent hooks write intact lines', async () => {
   const log = tmpLog();
   const N = 8;
   await Promise.all(Array.from({ length: N }, (_, i) => new Promise((resolve) => {
-    const p = spawn(process.execPath, [HOOK], { env: { ...process.env, CLAUDE_WIDGET_WORKERS: log } });
+    const p = spawn(process.execPath, [HOOK], { env: { ...process.env, GREMLIN_WORKERS: log } });
     p.on('exit', resolve);
     p.stdin.end(JSON.stringify({ hook_event_name: 'SubagentStart', agent_id: `ag${i}`, agent_type: 'Explore' }));
   })));
@@ -104,7 +104,7 @@ test('events carry the session id, and snapshots their source hook', () => {
 
 test('script outside the widget still consumes a large stdin cleanly', () => {
   const env = { ...process.env };
-  delete env.CLAUDE_WIDGET_WORKERS;
+  delete env.GREMLIN_WORKERS;
   const big = JSON.stringify({ hook_event_name: 'PostToolUse', tool_response: { stdout: 'x'.repeat(4 * 1024 * 1024) } });
   const r = spawnSync(process.execPath, [HOOK], { input: big, env, encoding: 'utf8' });
   assert.equal(r.error, undefined);

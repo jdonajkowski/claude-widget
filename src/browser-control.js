@@ -1,7 +1,7 @@
 // Lets Claude drive the built-in browser's page from a session: `widget-browser <command>` (bin/) talks to
 // this HTTP endpoint on 127.0.0.1, which runs Chrome DevTools Protocol commands on the browser page only
 // (webContents.debugger), never on the widget's own windows. Every request needs the per-run token that
-// widget sessions get in CLAUDE_WIDGET_BROWSER_TOKEN; requests from web pages (Origin header) are refused.
+// widget sessions get in GREMLIN_BROWSER_TOKEN; requests from web pages (Origin header) are refused.
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
@@ -66,7 +66,7 @@ function createPageLog() {
 const LEVELS = { 0: 'debug', 1: 'info', 2: 'warning', 3: 'error' };
 
 // browser: src/browser-window.js. shotsDir: where screenshots go unless --out says otherwise.
-function createControl({ browser, token = crypto.randomBytes(24).toString('hex'), shotsDir = path.join(os.tmpdir(), 'claude-widget', 'screenshots') }) {
+function createControl({ browser, token = crypto.randomBytes(24).toString('hex'), shotsDir = path.join(os.tmpdir(), 'gremlin', 'screenshots') }) {
   let log = createPageLog();
   let attachedTo = null;
 
@@ -92,7 +92,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
   async function page({ open = true } = {}) {
     let wc = browser.page();
     if (!wc && open) { await browser.load(null, { focus: false }); wc = browser.page(); }
-    if (!wc) throw new Error('The browser is not open. Run: widget-browser open <file-or-url>');
+    if (!wc) throw new Error('The browser is not open. Run: gremlin-browser open <file-or-url>');
     await ensureDebugger(wc);
     return wc;
   }
@@ -118,7 +118,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
 
   const commands = {
     async open({ target, cwd }) {
-      if (!target) throw new Error('Usage: widget-browser open <file-or-url>');
+      if (!target) throw new Error('Usage: gremlin-browser open <file-or-url>');
       const abs = /^[a-z][\w+.-]*:/i.test(target) && !/^[a-z]:[\\/]/i.test(target) ? target
         : /^(localhost|127\.|\[::1\])/i.test(target) ? target : path.resolve(cwd || process.cwd(), target);
       const r = await browser.load(abs, { focus: false });
@@ -159,7 +159,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
       return { file };
     },
     async eval({ js }) {
-      if (!js) throw new Error('Usage: widget-browser eval "<javascript>"   (or --file script.js, or - to read stdin)');
+      if (!js) throw new Error('Usage: gremlin-browser eval "<javascript>"   (or --file script.js, or - to read stdin)');
       return { value: await evaluate(js) };
     },
     async text({ selector }) {
@@ -173,7 +173,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
       return { html: clip(h) };
     },
     async click({ selector }) {
-      if (!selector) throw new Error('Usage: widget-browser click <css-selector>');
+      if (!selector) throw new Error('Usage: gremlin-browser click <css-selector>');
       await waitFor(selector, 5000);
       // A real mouse click at the element's center, so frameworks see the same events as from a user.
       const c = await inPage((s) => {
@@ -186,14 +186,14 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
       return { clicked: selector };
     },
     async type({ selector, text }) {
-      if (!selector || text === undefined) throw new Error('Usage: widget-browser type <css-selector> <text>');
+      if (!selector || text === undefined) throw new Error('Usage: gremlin-browser type <css-selector> <text>');
       await waitFor(selector, 5000);
       await inPage((s) => { const el = document.querySelector(s); el.focus(); if ('value' in el) el.value = ''; }, selector);
       await cdp('Input.insertText', { text: String(text) });
       return { typed: selector };
     },
     async press({ key }) {
-      if (!key) throw new Error('Usage: widget-browser press <key>   e.g. Enter, Tab, Escape, ArrowDown');
+      if (!key) throw new Error('Usage: gremlin-browser press <key>   e.g. Enter, Tab, Escape, ArrowDown');
       const codes = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Space: 32 };
       const k = key === 'Space' ? ' ' : key;
       const base = { key: k, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, windowsVirtualKeyCode: codes[key] || key.toUpperCase().charCodeAt(0) };
@@ -202,7 +202,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
       return { pressed: key };
     },
     async wait({ selector, timeout }) {
-      if (!selector) throw new Error('Usage: widget-browser wait <css-selector> [--timeout seconds]');
+      if (!selector) throw new Error('Usage: gremlin-browser wait <css-selector> [--timeout seconds]');
       await page();
       await waitFor(selector, (Number(timeout) || 10) * 1000);
       return { found: selector };
@@ -229,7 +229,7 @@ function createControl({ browser, token = crypto.randomBytes(24).toString('hex')
 
   async function run(cmd, body) {
     const fn = Object.prototype.hasOwnProperty.call(commands, cmd) ? commands[cmd] : null;
-    if (!fn) throw new Error(`Unknown command: ${cmd}. Run: widget-browser help`);
+    if (!fn) throw new Error(`Unknown command: ${cmd}. Run: gremlin-browser help`);
     return fn(body || {});
   }
 

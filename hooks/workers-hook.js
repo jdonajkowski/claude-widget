@@ -1,7 +1,7 @@
-// Claude Code hook that feeds the Claude Widget's worker rows.
+// Claude Code hook that feeds Gremlin's worker rows.
 // Registered for SubagentStart, SubagentStop, Stop, Notification and PostToolUse (Bash|PowerShell, and
 // TodoWrite|TaskCreate|TaskUpdate for the task list progress bar).
-// Appends JSON lines to the file named by CLAUDE_WIDGET_WORKERS, which only the widget sets.
+// Appends JSON lines to the file named by GREMLIN_WORKERS, which only the widget sets.
 // Must never block Claude or print into the session: always exits 0, writes nothing to stdout/stderr.
 const fs = require('fs');
 
@@ -26,7 +26,7 @@ function snapshot(p, ts) {
   return { t: 'snapshot', ids: tasks.map((x) => x && x.id).filter((id) => typeof id === 'string'), ts, src: p.hook_event_name };
 }
 
-// Every claude started inside the widget inherits CLAUDE_WIDGET_WORKERS (e.g. a `claude -p` run from Bash),
+// Every claude started inside the widget inherits GREMLIN_WORKERS (e.g. a `claude -p` run from Bash),
 // so events carry the session id and the reducer only lets a session's snapshots finish its own workers.
 function toEvents(p, ts) {
   if (!p || typeof p !== 'object') return [];
@@ -83,7 +83,7 @@ function eventsFor(p, ts) {
 }
 
 function main() {
-  const file = process.env.CLAUDE_WIDGET_WORKERS;
+  const file = process.env.GREMLIN_WORKERS;
   let raw = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => (raw += d));

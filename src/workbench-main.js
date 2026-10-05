@@ -169,7 +169,7 @@ function setupWorkbench(d) {
     if (isWin) {
       // Windows makes one restore point per 24 h unless the frequency limit is lifted, so lift it for this one.
       const script = [
-        `$desc = ${psq(`Claude Widget ${stamp}`)}`,
+        `$desc = ${psq(`Gremlin ${stamp}`)}`,
         "$key = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore'",
         "$old = (Get-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency",
         "Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value 0 -Type DWord",
@@ -182,8 +182,8 @@ function setupWorkbench(d) {
     const tool = d.which('timeshift') ? 'timeshift' : d.which('snapper') ? 'snapper' : null;
     if (!tool) return { error: 'Install Timeshift or Snapper for snapshots (on Arch: sudo pacman -S timeshift)' };
     const cmd = tool === 'timeshift'
-      ? `sudo timeshift --create --comments ${sq(`Claude Widget ${stamp}`)} --tags D`
-      : `sudo snapper create --description ${sq(`Claude Widget ${stamp}`)}`;
+      ? `sudo timeshift --create --comments ${sq(`Gremlin ${stamp}`)} --tags D`
+      : `sudo snapper create --description ${sq(`Gremlin ${stamp}`)}`;
     return (await d.runInTerminal(cmd)) ? { ok: true, how: tool } : { error: 'No terminal found' };
   });
   on('wb:snapshot:openRestore', () => {

@@ -1,11 +1,14 @@
-// Where the widget keeps its data: everything lives under ~/Projects/.claude (Windows: %USERPROFILE%\Projects).
-//   ~/Projects/.claude          Claude Code's config folder for widget sessions (CLAUDE_CONFIG_DIR)
-//   ~/Projects/.claude/widget   the widget's own files (config.json, window state, session files)
-// The first run copies what already exists: the old widget folder (%APPDATA%\Claude Widget) and ~/.claude.
+// Where Gremlin keeps its data: everything lives under ~/Projects/.claude (Windows: %USERPROFILE%\Projects).
+//   ~/Projects/.claude           Claude Code's config folder for Gremlin sessions (CLAUDE_CONFIG_DIR)
+//   ~/Projects/.claude/gremlin   Gremlin's own files (config.json, window state, change log, session files)
+// The first run copies what already exists: the folder of the app's old name, Claude Widget
+// (~/Projects/.claude/widget, or before 0.3.0 %APPDATA%\Claude Widget), and ~/.claude.
 const fs = require('fs');
 const path = require('path');
 
-const WIDGET_FILES = ['config.json', 'window-state.json', 'projects.json'];
+const WIDGET_FILES = ['config.json', 'window-state.json', 'projects.json', 'bench.json'];
+// Folders carried over too: the system change log with its undo backups.
+const WIDGET_DIRS = ['changes'];
 // Not copied from ~/.claude: per-machine scratch, and the sign-in token. Two copies of one OAuth login
 // refresh independently and can sign each other out, so widget sessions sign in once on their own.
 const SKIP_CLAUDE = new Set(['.credentials.json', 'shell-snapshots', 'session-env', 'telemetry', 'statsig', 'cache', 'ide']);
@@ -13,12 +16,13 @@ const MARKER = '.widget-migrated.json';
 
 function layout(home) {
   const root = path.join(home, 'Projects', '.claude');
-  return { root, widget: path.join(root, 'widget') };
+  return { root, widget: path.join(root, 'gremlin'), legacy: path.join(root, 'widget') };
 }
 
 const expandHome = (p, home) => (typeof p === 'string' && /^~(?=$|[\\/])/.test(p) ? path.join(home, p.slice(1)) : p);
 
-// Copies the widget's settings files once, if the new folder has none yet. Returns the names copied.
+// Copies the app's settings files (and change log) once, if the new folder has none yet. Copies, not
+// moves, so the old app keeps working until it is uninstalled. Returns the names copied.
 function migrateWidgetData(fromDir, toDir) {
   if (!fromDir || path.resolve(fromDir) === path.resolve(toDir)) return [];
   if (fs.existsSync(path.join(toDir, 'config.json'))) return [];
@@ -28,6 +32,13 @@ function migrateWidgetData(fromDir, toDir) {
     if (!fs.existsSync(src)) continue;
     fs.mkdirSync(toDir, { recursive: true });
     fs.copyFileSync(src, path.join(toDir, name));
+    copied.push(name);
+  }
+  if (!copied.length) return copied;
+  for (const name of WIDGET_DIRS) {
+    const src = path.join(fromDir, name);
+    if (!fs.existsSync(src) || fs.existsSync(path.join(toDir, name))) continue;
+    fs.cpSync(src, path.join(toDir, name), { recursive: true });
     copied.push(name);
   }
   return copied;

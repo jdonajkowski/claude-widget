@@ -46,7 +46,7 @@ if (!isMainThread) {
 
   // 256 MB in 4 MB chunks, flushed to disk: MB per second.
   function diskWrite(dir) {
-    const file = path.join(dir, `claude-widget-bench-${process.pid}.tmp`);
+    const file = path.join(dir, `gremlin-bench-${process.pid}.tmp`);
     const chunk = crypto.randomBytes(4 * 1048576);
     const start = process.hrtime.bigint();
     const fd = fs.openSync(file, 'w');
@@ -63,7 +63,7 @@ if (!isMainThread) {
 
   // 4 KB writes, each flushed (what databases and package managers do): writes per second.
   function diskSync(dir, ms) {
-    const file = path.join(dir, `claude-widget-bench-sync-${process.pid}.tmp`);
+    const file = path.join(dir, `gremlin-bench-sync-${process.pid}.tmp`);
     const chunk = crypto.randomBytes(4096);
     const fd = fs.openSync(file, 'w');
     const end = Date.now() + ms;

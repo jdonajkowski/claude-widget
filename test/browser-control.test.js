@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { createControl, authorized, cdpAllowed, createPageLog } = require('../src/browser-control');
-const cli = require('../bin/widget-browser.js');
+const cli = require('../bin/gremlin-browser.js');
 
 const req = (headers) => ({ headers });
 

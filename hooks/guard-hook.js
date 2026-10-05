@@ -1,8 +1,8 @@
 // Claude Code hook: the widget's safety net for system changes (src/system-guard.js).
 // PreToolUse (Bash|PowerShell): when a command changes the system, read the old state (registry values,
 // service startup types, sysctl values, files under /etc, ...), write the change and its undo steps to
-// CLAUDE_WIDGET_CHANGES/changes.jsonl, and, in "ask" mode, make Claude Code ask before running it.
-// PostToolUse: mark the change as run. Outside the widget (no CLAUDE_WIDGET_CHANGES) it does nothing.
+// GREMLIN_CHANGES/changes.jsonl, and, in "ask" mode, make Claude Code ask before running it.
+// PostToolUse: mark the change as run. Outside the widget (no GREMLIN_CHANGES) it does nothing.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -60,7 +60,7 @@ function handle(p, dir, mode) {
   const undo = guard.resolveUndo(guard.planUndo(cmd, isWin), (c) => runCapture(c, ctx));
   fs.appendFileSync(file, JSON.stringify({
     t: 'change', id, at: Date.now(), command: cmd, reasons, undo, isWin,
-    cwd: p.cwd || process.cwd(), sid: p.session_id || null, project: process.env.CLAUDE_WIDGET_PROJECT || null
+    cwd: p.cwd || process.cwd(), sid: p.session_id || null, project: process.env.GREMLIN_PROJECT || null
   }) + '\n');
 
   if (mode !== 'ask') return null;
@@ -77,8 +77,8 @@ function handle(p, dir, mode) {
 }
 
 function main() {
-  const dir = process.env.CLAUDE_WIDGET_CHANGES;
-  const mode = process.env.CLAUDE_WIDGET_GUARD || 'ask';
+  const dir = process.env.GREMLIN_CHANGES;
+  const mode = process.env.GREMLIN_GUARD || 'ask';
   let raw = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d) => (raw += d));

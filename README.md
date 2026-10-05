@@ -1,18 +1,22 @@
-# Claude Widget
+<p align="center"><img src="assets/logo.svg" width="360" alt="A gremlin peeking over a page with a terminal prompt"></p>
 
-A borderless, always-on-top desktop widget that hosts [Claude Code](https://claude.com/claude-code) terminal sessions, one per project, with a file tree, an editor, a browser and a status panel around them. Built with Electron, [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty) and [Monaco](https://microsoft.github.io/monaco-editor/). Runs on Windows and Linux (Arch packages included).
+# Gremlin
+
+*Formerly Claude Widget.*
+
+A borderless, always-on-top desktop workspace that hosts [Claude Code](https://claude.com/claude-code) terminal sessions, one per project, with a file tree, an editor, a browser and a status panel around them. Built with Electron, [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty) and [Monaco](https://microsoft.github.io/monaco-editor/). Runs on Windows and Linux (Arch packages included).
 
 ## Install
 
-**Windows:** download and run [**Claude-Widget-Setup.exe**](https://github.com/jdonajkowski/claude-widget/releases/latest/download/Claude-Widget-Setup.exe) (always the latest release; older versions are on the [releases page](https://github.com/jdonajkowski/claude-widget/releases)). It installs per user to `%LOCALAPPDATA%\Programs\claude-desktop-widget`, needs no admin rights and replaces an existing install. Everything the widget itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
+**Windows:** download and run [**Gremlin-Setup.exe**](https://github.com/jdonajkowski/gremlin-desk/releases/latest/download/Gremlin-Setup.exe) (always the latest release; older versions are on the [releases page](https://github.com/jdonajkowski/gremlin-desk/releases)). It installs per user to `%LOCALAPPDATA%\Programs\gremlin-desk`, needs no admin rights and replaces an existing install. **Coming from Claude Widget** (the old name)? Gremlin installs next to it and copies its settings, project list, benchmarks and change log on first start; then uninstall Claude Widget in Settings → Apps. If you once added its hooks or status line wrapper to `settings.json` by hand, remove those entries (Gremlin passes its own to each session). Everything Gremlin itself needs is inside the installer; Node.js is not required. The installer isn't code-signed, so SmartScreen may ask you to confirm ("More info" → "Run anyway").
 
-**Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/claude-widget/releases): an Arch `.pacman` package and an AppImage for other distros. This one-liner picks the right file and installs it (no GitHub account needed):
+**Linux:** installers are published as [GitHub Releases](https://github.com/jdonajkowski/gremlin-desk/releases): an Arch `.pacman` package and an AppImage for other distros. This one-liner picks the right file and installs it (no GitHub account needed):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jdonajkowski/claude-widget/main/scripts/install-linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jdonajkowski/gremlin-desk/main/scripts/install-linux.sh | bash
 ```
 
-On Arch and Arch-based distros it installs the package to `/opt/Claude Widget` with a menu entry (it asks for your sudo password). Elsewhere it puts the AppImage in `~/.local/bin` with a menu entry; AppImages need FUSE 2 (`libfuse2` / `fuse2`). To update, run it again. Add `-s v0.3.0` after `bash` for a specific release. You can also download the files from the [releases page](https://github.com/jdonajkowski/claude-widget/releases) and run `sudo pacman -U claude-desktop-widget-<version>.pacman`.
+On Arch and Arch-based distros it installs the package to `/opt/Gremlin` with a menu entry (it asks for your sudo password). Elsewhere it puts the AppImage in `~/.local/bin` with a menu entry; AppImages need FUSE 2 (`libfuse2` / `fuse2`). To update, run it again. Add `-s v0.3.0` after `bash` for a specific release. You can also download the files from the [releases page](https://github.com/jdonajkowski/gremlin-desk/releases) and run `sudo pacman -U claude-desktop-widget-<version>.pacman`.
 
 **First launch** opens **Settings → Setup**, which checks this machine and fixes what's missing:
 
@@ -24,7 +28,7 @@ On Arch and Arch-based distros it installs the package to `/opt/Claude Widget` w
 | Claude sign-in | Starts `claude`, which signs you in through your browser |
 | Node.js, VS Code | Optional; installs them if you want npx-based tools or "Open in VS Code" |
 
-Install and sign-in steps run in a terminal window you can see. Click **Check again** when one finishes: the widget re-reads `PATH`, so new tools work without a restart. Setup is always available from the tray menu or **Settings → Setup**.
+Install and sign-in steps run in a terminal window you can see. Click **Check again** when one finishes: Gremlin re-reads `PATH`, so new tools work without a restart. Setup is always available from the tray menu or **Settings → Setup**.
 
 ## Where things are stored
 
@@ -32,11 +36,11 @@ Everything lives under your projects folder, `~/Projects` (`%USERPROFILE%\Projec
 
 | Folder | Contents |
 | --- | --- |
-| `~/Projects/<name>` | Your projects. Every subfolder is listed in the widget |
-| `~/Projects/.claude` | Claude Code's config folder for widget sessions (`CLAUDE_CONFIG_DIR`): plugins, skills, commands, history, `settings.json`, `CLAUDE.md` and the global `AGENTS.md` |
-| `~/Projects/.claude/widget` | The widget's own files: `config.json`, `window-state.json`, `projects.json`, per-session logs |
+| `~/Projects/<name>` | Your projects. Every subfolder is listed in Gremlin |
+| `~/Projects/.claude` | Claude Code's config folder for Gremlin sessions (`CLAUDE_CONFIG_DIR`): plugins, skills, commands, history, `settings.json`, `CLAUDE.md` and the global `AGENTS.md` |
+| `~/Projects/.claude/gremlin` | Gremlin's own files: `config.json`, `window-state.json`, `projects.json`, the system change log, per-session logs |
 
-The first run copies what already exists: `%APPDATA%\Claude Widget` (Windows) into `.claude/widget`, and `~/.claude` plus `~/.claude.json` into `~/Projects/.claude`. Plugin paths are rewritten to the new folder. Your sign-in token is **not** copied, because two copies of one login can sign each other out. Instead, widget sessions sign in once on their own (Setup → Sign in). Claude Code outside the widget, including the Claude desktop app, keeps using `~/.claude`. Set **Settings → General → Claude config folder** to empty to share `~/.claude` instead.
+The first run copies what already exists: the settings of Claude Widget (the app's old name, `.claude/widget` or `%APPDATA%\Claude Widget` on Windows) into `.claude/gremlin`, and `~/.claude` plus `~/.claude.json` into `~/Projects/.claude`. Plugin paths are rewritten to the new folder. Your sign-in token is **not** copied, because two copies of one login can sign each other out. Instead, Gremlin sessions sign in once on their own (Setup → Sign in). Claude Code outside Gremlin, including the Claude desktop app, keeps using `~/.claude`. Set **Settings → General → Claude config folder** to empty to share `~/.claude` instead.
 
 Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_CONFIG_DIR=~/Projects/.claude npx ccusage@latest daily`.
 
@@ -46,8 +50,8 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
-- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Claude (or you) can open a page here from any widget session or terminal tab with `widget-open <file-or-url>`, e.g. `widget-open mockups/login.html`.
-- **Browser control for Claude:** `widget-browser` in widget sessions drives the browser's page: `open`, `screenshot` (prints a PNG path Claude can read; `--full`, `--selector`), `viewport mobile`, `text`/`html`, `click`, `type`, `press`, `wait`, `eval`, `console --errors`, `network --failed`, and `cdp <Domain.method> [json]` for any Chrome DevTools Protocol command. It goes through a local endpoint (127.0.0.1, a random port and a per-run token that only widget sessions get) that only reaches the browser page: the widget's own windows aren't exposed, and browser-wide CDP domains (Target, Browser) are refused. Turn it off with `browserControl` Pages run sandboxed, with no permissions (camera, location, …) and their own storage
+- **Browser:** the globe button opens a Chromium window for mockups, local dev servers and tests. It has back/forward, viewport sizes (desktop 1440, laptop 1280, tablet 768, mobile 390), DevTools, and a screenshot button that saves a PNG next to the project, so Claude can look at it. Local HTML files reload when anything in their folder changes. `localhost` links Claude prints open here, other web links in your default browser. Claude (or you) can open a page here from any Gremlin session or terminal tab with `gremlin-open <file-or-url>`, e.g. `gremlin-open mockups/login.html`.
+- **Browser control for Claude:** `gremlin-browser` in Gremlin sessions drives the browser's page: `open`, `screenshot` (prints a PNG path Claude can read; `--full`, `--selector`), `viewport mobile`, `text`/`html`, `click`, `type`, `press`, `wait`, `eval`, `console --errors`, `network --failed`, and `cdp <Domain.method> [json]` for any Chrome DevTools Protocol command. It goes through a local endpoint (127.0.0.1, a random port and a per-run token that only Gremlin sessions get) that only reaches the browser page: Gremlin's own windows aren't exposed, and browser-wide CDP domains (Target, Browser) are refused. Turn it off with `browserControl` Pages run sandboxed, with no permissions (camera, location, …) and their own storage
 - **Markdown popouts:** click a `.md` path in the terminal to open it rendered (live-reloads on save). Paths relative to a subfolder, bare file names, a trailing period and OSC 8 links all work. **Edit** opens the file in the editor
 - **Settings window:** every setting in a form (gear button), plus **Global instructions**, an editor for the `AGENTS.md` Claude follows in every project
 - **Status panel** (right): worker rows for subagents and background shells, then progress bars: Claude's task list (done / total, with the task in progress), a running benchmark, and the project's Run-menu tasks (running, passed, failed; click one to show its tab). Below them CPU, CPU temperature, memory, GPU, VRAM and disk, and at the bottom the model, cost, context use, 5-hour and 7-day limits with a bar for time through the 5-hour window (usage ahead of it means you'll hit the limit before it resets), git branch and changes, and a turn timer. It collapses to a slim strip
@@ -68,19 +72,19 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 
 ### For tuning the system
 
-- **Safety net:** a hook (`hooks/guard-hook.js`) looks at every Bash/PowerShell command Claude runs in a widget session. System changes (registry, services, scheduled tasks, boot configuration, power plans, Windows features, Defender, firewall and network, environment variables, files in `C:\Windows`/`Program Files` and the hosts file; on Linux sudo, pacman/apt/dnf, systemctl, sysctl and `/proc/sys`/`/sys`, files in `/etc` and `/boot`, bootloader, kernel modules, disks, CPU/GPU tuning, firewall, users) make Claude **ask first**, even in auto-accept modes. Before asking, the hook reads the old state and records how to undo it. Settings → General or the shield menu switches it to *only log* or *off*
+- **Safety net:** a hook (`hooks/guard-hook.js`) looks at every Bash/PowerShell command Claude runs in a Gremlin session. System changes (registry, services, scheduled tasks, boot configuration, power plans, Windows features, Defender, firewall and network, environment variables, files in `C:\Windows`/`Program Files` and the hosts file; on Linux sudo, pacman/apt/dnf, systemctl, sysctl and `/proc/sys`/`/sys`, files in `/etc` and `/boot`, bootloader, kernel modules, disks, CPU/GPU tuning, firewall, users) make Claude **ask first**, even in auto-accept modes. Before asking, the hook reads the old state and records how to undo it. Settings → General or the shield menu switches it to *only log* or *off*
 - **Changes and undo** (Workbench → Changes): each change with its command, whether it ran, and its undo steps: registry values put back (or removed if they were new), deleted keys re-imported from an export, service startup types and running state, power plan and power settings, environment variables, execution policy, Defender settings, scheduled tasks, Windows features, winget/choco packages, sysctl and sysfs values, systemd units, pacman/apt/dnf packages, backed-up `/etc` files, GPU power limits and clocks, CPU governor, power profiles. **Undo** runs them in a terminal window, as administrator (UAC) when needed, newest change first; **Copy undo script** copies them. Commands without an automatic undo say so
 - **Snapshots** (Workbench → Monitor & snapshots, or the shield menu): a Windows restore point (lifting Windows' one-per-day limit for that one), or a Timeshift/Snapper snapshot on Linux, plus a button to open System Restore / Timeshift
 - **System monitor:** CPU (with per-core bars), memory, GPU (nvidia-smi, or amdgpu on Linux: load, temperature, VRAM, power, clock) and disk, live in the side panel and with history graphs in the Workbench. CPU temperature comes from hwmon on Linux; on Windows it needs [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) running, since Windows only shows it to administrators
 - **Benchmark:** a 10-second run (single-core and all-core hashing, memory copies, disk writes and flushes). Label runs ("before", "after power plan"), pick a baseline, and see the change in percent
-- **Admin terminal** (shield button ⛨): a terminal tab running as administrator after one UAC prompt (Linux: `sudo -s`), or **Claude as administrator** on Windows, with the widget's hooks, so the safety net still applies. Admin tabs are red and turn the window frame red while in front
+- **Admin terminal** (shield button ⛨): a terminal tab running as administrator after one UAC prompt (Linux: `sudo -s`), or **Claude as administrator** on Windows, with Gremlin's hooks, so the safety net still applies. Admin tabs are red and turn the window frame red while in front
 - **Logs** (Workbench): errors and warnings from the Windows Event Log (System, Application) or the systemd journal, for the last hour, day or week, with a filter and auto-refresh. **Ask Claude** pastes an entry into the active session as a question about it; you review it and press Enter
 
 ## Keyboard and mouse
 
 | Action | Shortcut |
 | --- | --- |
-| Show / hide widget | `Ctrl+Alt+Space` (configurable) |
+| Show / hide Gremlin | `Ctrl+Alt+Space` (configurable) |
 | Copy selection | `Ctrl+C` with text selected, or `Ctrl+Shift+C` |
 | Paste | `Ctrl+V` / `Ctrl+Shift+V` |
 | Newline in Claude's prompt | `Shift+Enter` |
@@ -108,18 +112,18 @@ Title-bar buttons: project list, files, browser, run (▶), admin and system (sh
 
 ## Settings
 
-The gear button (or the tray menu) opens the settings window. It edits `~/Projects/.claude/widget/config.json`, keeps keys it doesn't know, and says when a change needs a restart (it has a Restart button). Opacity, pin and the hotkey apply right away. **Open config.json** opens the file itself.
+The gear button (or the tray menu) opens the settings window. It edits `~/Projects/.claude/gremlin/config.json`, keeps keys it doesn't know, and says when a change needs a restart (it has a Restart button). Opacity, pin and the hotkey apply right away. **Open config.json** opens the file itself.
 
 | Key | Default | Notes |
 | --- | --- | --- |
 | `shell` / `shellArgs` | `powershell.exe -NoLogo -NoExit -Command claude` (Linux: `$SHELL -lc …`) | Shell that hosts each session. Its last argument is replaced by the Claude command |
 | `claudeCommand` | last `shellArgs` element, else `claude` | Command each project's session runs. ` --continue` is added the first time a project with Claude history is opened |
-| `claudeConfigDir` | `~/Projects/.claude` | Claude Code's config folder for widget sessions (`CLAUDE_CONFIG_DIR`). Empty: `~/.claude` |
-| `claudeHooks` | `true` | Pass the widget's hooks and status line to each session (see below) |
+| `claudeConfigDir` | `~/Projects/.claude` | Claude Code's config folder for Gremlin sessions (`CLAUDE_CONFIG_DIR`). Empty: `~/.claude` |
+| `claudeHooks` | `true` | Pass Gremlin's hooks and status line to each session (see below) |
 | `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
 | `showSysmon` | `true` | CPU, temperature, memory, GPU, VRAM and disk in the side panel |
 | `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
-| `browserControl` | `true` | Let sessions drive the built-in browser with `widget-browser` (takes effect after a restart) |
+| `browserControl` | `true` | Let sessions drive the built-in browser with `gremlin-browser` (takes effect after a restart) |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |
 | `cwd` | home folder | Project to open at launch when no project was open last time, if it is in the list |
 | `env` | `{}` | Extra environment variables for the sessions |
@@ -139,17 +143,17 @@ Window position, pin state, opacity, the open/collapsed state of each pane and t
 
 ### Hooks and status line
 
-Worker rows, the "needs you" dot and most of the status footer come from Claude Code hooks (`hooks/workers-hook.js`) and a status line wrapper (`hooks/statusline-tee.js`). With `claudeHooks` on, the widget hands them to each session it starts with `claude --settings`, so `settings.json` needs nothing added. The wrapper runs your own status line command (from `settings.json`) and passes its output through, so your status line looks the same.
+Worker rows, the "needs you" dot and most of the status footer come from Claude Code hooks (`hooks/workers-hook.js`) and a status line wrapper (`hooks/statusline-tee.js`). With `claudeHooks` on, Gremlin hands them to each session it starts with `claude --settings`, so `settings.json` needs nothing added. The wrapper runs your own status line command (from `settings.json`) and passes its output through, so your status line looks the same.
 
-The scripts run on Node.js when it's on `PATH`, otherwise on the widget's own runtime (`ELECTRON_RUN_AS_NODE`), through bash on Linux or Git Bash, or PowerShell on Windows without Git Bash. If `settings.json` already has the widget's hooks or wrapper (the manual setup of older versions), the widget uses those and doesn't add its own. Hooks only act inside the widget: they check `CLAUDE_WIDGET_WORKERS` and `CLAUDE_WIDGET_STATUS`, which only widget sessions have.
+The scripts run on Node.js when it's on `PATH`, otherwise on Gremlin's own runtime (`ELECTRON_RUN_AS_NODE`), through bash on Linux or Git Bash, or PowerShell on Windows without Git Bash. If `settings.json` already has Gremlin's hooks or wrapper (the manual setup of older versions), Gremlin uses those and doesn't add its own. Hooks only act inside Gremlin: they check `GREMLIN_WORKERS` and `GREMLIN_STATUS`, which only Gremlin sessions have.
 
-The same hook also follows Claude's task list (TaskCreate / TaskUpdate, or TodoWrite) for the tasks progress bar. If `settings.json` has the widget hooks from an older manual setup, the widget adds only the matchers missing there.
+The same hook also follows Claude's task list (TaskCreate / TaskUpdate, or TodoWrite) for the tasks progress bar. If `settings.json` has Gremlin hooks from an older manual setup, Gremlin adds only the matchers missing there.
 
 Only permission prompts and questions turn the dot to "needs you" (`notification_type` `permission_prompt` / `elicitation_dialog`), not the idle reminder after each turn. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds.
 
 ### Project list
 
-The list shows every subfolder of `projectsRoot` plus folders you pin from anywhere (📌), in alphabetical order. Click a project to switch to it. The session you leave keeps running in the background. A project's session starts the first time you open it in a widget run, with `--continue` if Claude has history for that folder. ↻ restarts only the active session, with a fresh conversation. Right-click a project for Close session, Open in Explorer, and Hide (Unpin for pinned folders). The + button adds a folder or un-hides one.
+The list shows every subfolder of `projectsRoot` plus folders you pin from anywhere (📌), in alphabetical order. Click a project to switch to it. The session you leave keeps running in the background. A project's session starts the first time you open it after Gremlin starts, with `--continue` if Claude has history for that folder. ↻ restarts only the active session, with a fresh conversation. Right-click a project for Close session, Open in Explorer, and Hide (Unpin for pinned folders). The + button adds a folder or un-hides one.
 
 | Dot | Meaning |
 | --- | --- |
@@ -160,7 +164,7 @@ The list shows every subfolder of `projectsRoot` plus folders you pin from anywh
 
 ### Progress bar
 
-Claude Code only emits OSC 9;4 progress for terminals it recognises, and turns progress *off* when `WT_SESSION` is set. Make the session look like ConEmu instead in `config.json`: `"env": { "ConEmuTask": "claude-widget" }`. Do not set `WT_SESSION`.
+Claude Code only emits OSC 9;4 progress for terminals it recognises, and turns progress *off* when `WT_SESSION` is set. Make the session look like ConEmu instead in `config.json`: `"env": { "ConEmuTask": "gremlin" }`. Do not set `WT_SESSION`.
 
 ## Building
 
@@ -170,7 +174,7 @@ Requires Node.js 20+ (tested with 24 / npm 11).
 npm install         # Electron downloads on first run
 npm start           # run from source
 npm test            # unit tests
-npm run dist        # Windows installer: dist/Claude-Widget-Setup.exe
+npm run dist        # Windows installer: dist/Gremlin-Setup.exe
 ```
 
 **Linux packages** (Arch `.pacman` and an AppImage) have to be built on Linux, because `node-pty` is compiled there. On Linux or in WSL, after the one-time package install listed at the top of the script:
@@ -191,7 +195,7 @@ Notes:
 
 - On Windows, `node-pty` ships N-API prebuilds that load in Electron as-is, so the build skips native rebuilds (`npmRebuild: false`).
 - npm 11 blocks dependency install scripts by default; `node-pty`'s is approved in `allowScripts` in `package.json`.
-- The widget allows one instance, so `npm start` just focuses a running widget. Quit it first, or run with `--user-data-dir=<folder>` for a separate instance.
+- Gremlin allows one instance, so `npm start` just focuses a running Gremlin. Quit it first, or run with `--user-data-dir=<folder>` for a separate instance.
 - `asar` is off, so `node-pty`'s binaries and the hook scripts load from disk. Only Monaco's `min` build is packaged.
 
 ## Repo layout
@@ -205,7 +209,7 @@ src/setup-checks.js      Setup tab: tools, install and sign-in commands
 src/settings.js          Settings form validation, AGENTS.md import
 src/files.js             Files pane: folder listing, open actions, Markdown lookup, VS Code links
 src/browser-window.js    Built-in browser window; src/browser-url.js turns typed text into URLs
-src/browser-control.js   widget-browser endpoint: CDP on the browser page, token-protected
+src/browser-control.js   gremlin-browser endpoint: CDP on the browser page, token-protected
 src/projects.js          Project list (scan + pinned - hidden) and initials
 src/session-state.js     Reducer: per-session signals -> project dot
 src/workers.js           Reducer: hook events -> worker rows and the task list progress
@@ -224,7 +228,7 @@ src/syslogs.js           Event Log / journal reader
 src/usage.js             Usage from ccusage or Claude's transcripts
 src/templates.js         New project templates written to disk; src/generators.js + src/spfx.js the generator ones (SPFx, TanStack Start, Next.js)
 src/workbench-main.js    Workbench window and its IPC
-src/preload.js           Bridge exposed to the main window as window.widget
+src/preload.js           Bridge exposed to the main window as window.widget (its name from the Claude Widget days)
 src/renderer/            Main window UI: terminals, project rail, files pane
 src/editor/              Editor window (Monaco)
 src/settings/            Settings window
@@ -232,10 +236,11 @@ src/browser/             Browser toolbar
 src/md/                  Markdown popout window
 src/workbench/           Workbench window: Git, New project, Usage, Monitor, Changes, Logs
 hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, run by Claude Code
-bin/                     widget-open and widget-browser (sh, .cmd, .ps1; widget-browser.js is the client), on PATH in widget sessions
+bin/                     gremlin-open and gremlin-browser (sh, .cmd, .ps1; gremlin-browser.js is the client), on PATH in Gremlin sessions; widget-open and widget-browser are the old names, kept as aliases
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
+scripts/render-icons.js  Renders assets/icon.ico and icon.png from assets/icon.svg (npx electron scripts/render-icons.js)
 test/                    Unit tests (npm test)
-assets/                  App and tray icons
+assets/                  App and tray icons (icon.svg is the source) and the logo (logo.svg)
 backup/                  Source before the progress-bar patch, and a snapshot of a working config
 ```

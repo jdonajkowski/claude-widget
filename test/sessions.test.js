@@ -91,8 +91,8 @@ test('open spawns once with per-session env and cwd; --continue only with histor
   assert.equal(b.args[3], 'claude.cmd');
   assert.equal(a.opts.cwd, cwd);
   assert.equal(a.opts.env.A, '1');
-  assert.notEqual(a.opts.env.CLAUDE_WIDGET_WORKERS, b.opts.env.CLAUDE_WIDGET_WORKERS);
-  assert.notEqual(a.opts.env.CLAUDE_WIDGET_STATUS, b.opts.env.CLAUDE_WIDGET_STATUS);
+  assert.notEqual(a.opts.env.GREMLIN_WORKERS, b.opts.env.GREMLIN_WORKERS);
+  assert.notEqual(a.opts.env.GREMLIN_STATUS, b.opts.env.GREMLIN_STATUS);
   assert.deepEqual(m.ids(), ['a', 'b']);
 });
 
@@ -146,8 +146,8 @@ test('workers log and status file are per session', () => {
   m.open('a', 'C:\\a');
   m.open('b', 'C:\\b');
   const env = pty.spawned[1].opts.env;
-  fs.appendFileSync(env.CLAUDE_WIDGET_WORKERS, JSON.stringify({ t: 'attention', ts: 1 }) + '\n');
-  fs.writeFileSync(env.CLAUDE_WIDGET_STATUS, JSON.stringify({ model: { id: 'm' } }));
+  fs.appendFileSync(env.GREMLIN_WORKERS, JSON.stringify({ t: 'attention', ts: 1 }) + '\n');
+  fs.writeFileSync(env.GREMLIN_STATUS, JSON.stringify({ model: { id: 'm' } }));
   m.pollWorkers();
   m.pollStatus();
   m.pollStatus();

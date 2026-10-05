@@ -70,12 +70,15 @@ const DEFAULT_CONFIG = {
   }
 };
 
-// All widget data lives in ~/Projects/.claude/widget (src/data-dirs.js), copied once from the old
-// %APPDATA%\Claude Widget. An explicit --user-data-dir still wins (handy for testing).
+// All of Gremlin's data lives in ~/Projects/.claude/gremlin (src/data-dirs.js), copied once from the app's
+// old name, Claude Widget: ~/Projects/.claude/widget, or %APPDATA%\Claude Widget before 0.3.0.
+// An explicit --user-data-dir still wins (handy for testing).
 const dataDirs = require('./data-dirs');
 const dirs = dataDirs.layout(os.homedir());
 if (!app.commandLine.hasSwitch('user-data-dir')) {
-  try { dataDirs.migrateWidgetData(app.getPath('userData'), dirs.widget); } catch (err) { console.error('Moving widget data failed', err); }
+  for (const from of [dirs.legacy, path.join(app.getPath('appData'), 'Claude Widget')]) {
+    try { dataDirs.migrateWidgetData(from, dirs.widget); } catch (err) { console.error(`Copying ${from} failed`, err); }
+  }
   app.setPath('userData', dirs.widget);
 }
 const userDir = app.getPath('userData');
@@ -130,21 +133,21 @@ const claudeEnv = () => (config.claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeDir
 const binDir = path.join(__dirname, '..', 'bin');
 const openEnv = () => ({
   ...prependPath(process.env, binDir, isWin),
-  CLAUDE_WIDGET_EXE: process.execPath,
-  ...(app.isPackaged ? {} : { CLAUDE_WIDGET_APP: path.join(__dirname, '..') }),
-  ...(control && control.url() ? { CLAUDE_WIDGET_BROWSER: control.url(), CLAUDE_WIDGET_BROWSER_TOKEN: control.token } : {})
+  GREMLIN_EXE: process.execPath,
+  ...(app.isPackaged ? {} : { GREMLIN_APP: path.join(__dirname, '..') }),
+  ...(control && control.url() ? { GREMLIN_BROWSER: control.url(), GREMLIN_BROWSER_TOKEN: control.token } : {})
 });
 const globalClaudeSettings = () => readJson(path.join(claudeDir(), 'settings.json'), {});
 // The guard hook's change log and file/registry backups (see hooks/guard-hook.js).
 const changesDir = path.join(userDir, 'changes');
-const guardEnv = () => ({ CLAUDE_WIDGET_CHANGES: changesDir, CLAUDE_WIDGET_GUARD: config.guardMode || 'ask' });
+const guardEnv = () => ({ GREMLIN_CHANGES: changesDir, GREMLIN_GUARD: config.guardMode || 'ask' });
 
 // First run with a separate config folder: copy ~/.claude into it (not the sign-in token, see data-dirs.js).
 let pendingToast = null;
 if (config.claudeConfigDir) {
   try {
     const moved = dataDirs.migrateClaudeConfig({ home: os.homedir(), to: claudeDir(), isWin });
-    if (moved) pendingToast = `Copied your Claude settings, plugins and history to ${claudeDir()}. Sign in once in a widget session.`;
+    if (moved) pendingToast = `Copied your Claude settings, plugins and history to ${claudeDir()}. Sign in once in a Gremlin session.`;
   } catch (err) {
     console.error('Copying ~/.claude failed', err);
   }
@@ -291,7 +294,7 @@ function createWindow() {
     backgroundMaterial: material,
     roundedCorners: true,
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
-    title: 'Claude Widget',
+    title: 'Gremlin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -910,7 +913,7 @@ ipcMain.on('md:vscode', (ev) => { const f = mdFileOf(ev.sender); if (f) openInVS
 const browser = createBrowser({ icon: path.join(__dirname, '..', 'assets', 'icon.png'), projectDir: () => projectPath(activeId), isWin });
 browser.handle(ipcMain);
 ipcMain.on('browser:open', () => browser.open());
-// Sessions started after this listens get CLAUDE_WIDGET_BROWSER(_TOKEN) for widget-browser (see openEnv).
+// Sessions started after this listens get GREMLIN_BROWSER(_TOKEN) for widget-browser (see openEnv).
 const control = config.browserControl === false ? null : createControl({ browser });
 
 // ---------------------------------------------------------------------------
@@ -1012,7 +1015,7 @@ function openSettings(tab) {
     height: 680,
     minWidth: 620,
     minHeight: 420,
-    title: 'Claude Widget Settings',
+    title: 'Gremlin Settings',
     backgroundColor: config.theme.background,
     autoHideMenuBar: true,
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
@@ -1281,7 +1284,7 @@ function ccusageCommand() {
 
 // Pastes text into the active project's Claude prompt (bracketed paste, not sent), for the user to review.
 function sendToSession(text) {
-  if (!activeId || !sessions.has(activeId)) return { error: 'Open a project session in the widget first' };
+  if (!activeId || !sessions.has(activeId)) return { error: 'Open a project session in Gremlin first' };
   sessions.write(activeId, `\x1b[200~${text}\x1b[201~`);
   send('aux:select', { id: activeId, projectId: activeId });
   if (win) { win.show(); win.focus(); }
@@ -1384,7 +1387,7 @@ ipcMain.on('shell:openExternal', (_e, url) => {
 // ---------------------------------------------------------------------------
 function createTray() {
   tray = new Tray(path.join(__dirname, '..', 'assets', isWin ? 'icon.ico' : 'icon.png'));
-  tray.setToolTip('Claude Widget');
+  tray.setToolTip('Gremlin');
   tray.on('click', toggleWindow);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show / hide', click: toggleWindow },
@@ -1410,7 +1413,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    if (control) await control.start().catch((err) => console.error('widget-browser endpoint:', err.message));
+    if (control) await control.start().catch((err) => console.error('gremlin-browser endpoint:', err.message));
     createWindow();
     for (const ev of ['show', 'hide', 'minimize', 'restore']) win.on(ev, watchSysmon);
     win.once('ready-to-show', watchSysmon);

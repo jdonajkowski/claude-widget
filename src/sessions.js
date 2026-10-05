@@ -62,7 +62,7 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
         cols: cols || 100,
         rows: rows || 30,
         cwd: s.cwd,
-        env: { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...extraEnv(), ...config.env, CLAUDE_WIDGET_WORKERS: s.workersPath, CLAUDE_WIDGET_STATUS: s.statusPath },
+        env: { ...baseEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...extraEnv(), ...config.env, GREMLIN_WORKERS: s.workersPath, GREMLIN_STATUS: s.statusPath },
         useConpty: isWin ? true : undefined
       });
     } catch (err) {

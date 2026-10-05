@@ -1,12 +1,12 @@
 // Claude Code statusLine wrapper: saves the status JSON for the widget's footer, then runs your real
 // status line command with the same input and passes its output through.
 //   "statusLine": { "type": "command", "command": "node \".../statusline-tee.js\" npx -y ccstatusline@latest" }
-// Writes to the file named by CLAUDE_WIDGET_STATUS (set only inside the widget), or --out=<file> for debugging.
+// Writes to the file named by GREMLIN_STATUS (set only inside the widget), or --out=<file> for debugging.
 const fs = require('fs');
 const { spawn } = require('child_process');
 
 const args = process.argv.slice(2);
-let out = process.env.CLAUDE_WIDGET_STATUS;
+let out = process.env.GREMLIN_STATUS;
 if (args[0] && args[0].startsWith('--out=')) out = args.shift().slice('--out='.length);
 const command = args.join(' ');
 

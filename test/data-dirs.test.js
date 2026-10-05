@@ -11,7 +11,8 @@ const write = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: tr
 test('layout puts everything under Projects/.claude', () => {
   const l = layout(path.join('C:', 'Users', 'me'));
   assert.equal(l.root, path.join('C:', 'Users', 'me', 'Projects', '.claude'));
-  assert.equal(l.widget, path.join(l.root, 'widget'));
+  assert.equal(l.widget, path.join(l.root, 'gremlin'));
+  assert.equal(l.legacy, path.join(l.root, 'widget'));
   assert.equal(expandHome('~/Projects/.claude', '/home/me'), path.join('/home/me', 'Projects/.claude'));
   assert.equal(expandHome('/abs', '/home/me'), '/abs');
 });
@@ -27,6 +28,22 @@ test('migrateWidgetData copies settings files once', () => {
   write(path.join(from, 'config.json'), '{"a":2}');
   assert.deepEqual(migrateWidgetData(from, to), []); // already there: left alone
   assert.equal(fs.readFileSync(path.join(to, 'config.json'), 'utf8'), '{"a":1}');
+});
+
+test('the Claude Widget folder carries over to Gremlin with its change log', () => {
+  const root = tmp();
+  const { widget, legacy } = layout(root);
+  write(path.join(legacy, 'config.json'), '{"theme":1}');
+  write(path.join(legacy, 'bench.json'), '{"runs":[]}');
+  write(path.join(legacy, 'changes', 'changes.jsonl'), '{"t":"change"}');
+  write(path.join(legacy, 'changes', 'backups', 'k.reg'), 'reg');
+  write(path.join(legacy, 'GPUCache', 'x'), 'no');
+  assert.deepEqual(migrateWidgetData(legacy, widget), ['config.json', 'bench.json', 'changes']);
+  assert.equal(fs.readFileSync(path.join(widget, 'changes', 'backups', 'k.reg'), 'utf8'), 'reg');
+  assert.equal(fs.existsSync(path.join(widget, 'GPUCache')), false);
+  assert.ok(fs.existsSync(path.join(legacy, 'config.json'))); // copied, not moved
+  assert.deepEqual(migrateWidgetData(path.join(root, 'nothing-here'), path.join(root, 'empty')), []);
+  assert.equal(fs.existsSync(path.join(root, 'empty')), false);
 });
 
 test('rewritePaths handles JSON-escaped Windows paths, case-insensitively', () => {

@@ -1,8 +1,3 @@
 #!/bin/sh
-# Drives Claude Widget's built-in browser: widget-browser help
-dir=$(dirname "$0")
-if command -v node >/dev/null 2>&1; then
-  exec node "$dir/widget-browser.js" "$@"
-fi
-if [ -z "$CLAUDE_WIDGET_EXE" ]; then echo "widget-browser: only works inside Claude Widget" >&2; exit 1; fi
-ELECTRON_RUN_AS_NODE=1 exec "$CLAUDE_WIDGET_EXE" "$dir/widget-browser.js" "$@"
+# Old name of gremlin-browser (the app was called Claude Widget), kept so existing instructions keep working.
+exec "$(dirname "$0")/gremlin-browser" "$@"

@@ -16,7 +16,7 @@ function elevateCommand({ execPath, helper, pipe, token }) {
 }
 
 function startElevated({ execPath, helper, launch, cwd, env, cols, rows, timeoutMs = 120000 }) {
-  const pipe = `\\\\.\\pipe\\claude-widget-admin-${crypto.randomBytes(12).toString('hex')}`;
+  const pipe = `\\\\.\\pipe\\gremlin-admin-${crypto.randomBytes(12).toString('hex')}`;
   const token = crypto.randomBytes(24).toString('hex');
   const dataCbs = [];
   const exitCbs = [];

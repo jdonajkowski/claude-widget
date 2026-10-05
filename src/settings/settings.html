@@ -26,7 +26,7 @@
       <label>Shell<input name="shell"></label>
       <label>Shell arguments<span class="hint">The last one is replaced by the Claude command. Quote arguments with spaces</span><input name="shellArgs"></label>
       <label>Claude command<span class="hint">Leave empty to use the last shell argument, else <code>claude</code></span><input name="claudeCommand" placeholder="claude"></label>
-      <label>Claude config folder<span class="hint">Sign-in, plugins, history and global settings for widget sessions (<code>CLAUDE_CONFIG_DIR</code>). Empty uses Claude's default <code>~/.claude</code></span>
+      <label>Claude config folder<span class="hint">Sign-in, plugins, history and global settings for Gremlin sessions (<code>CLAUDE_CONFIG_DIR</code>). Empty uses Claude's default <code>~/.claude</code></span>
         <span class="row"><input name="claudeConfigDir" placeholder="~/.claude"><button type="button" data-browse="claudeConfigDir">Browse…</button></span></label>
       <label>Environment variables<span class="hint">One <code>NAME=value</code> per line, added to every session</span><textarea name="env" rows="4" spellcheck="false"></textarea></label>
 
@@ -35,7 +35,7 @@
         <select name="guardMode"><option value="ask">Claude asks first (recommended)</option><option value="log">Only log them, with their undo</option><option value="off">Off</option></select></label>
       <label class="check"><input type="checkbox" name="showSysmon"> Show CPU, memory and GPU in the side panel</label>
       <label class="check"><input type="checkbox" name="autoOpenDevServer"> Open dev servers started from the Run menu in the built-in browser</label>
-      <label class="check"><input type="checkbox" name="browserControl"> Let Claude drive the built-in browser (widget-browser: screenshots, clicks, console, DevTools Protocol). Applies after a restart</label>
+      <label class="check"><input type="checkbox" name="browserControl"> Let Claude drive the built-in browser (gremlin-browser: screenshots, clicks, console, DevTools Protocol). Applies after a restart</label>
 
       <h2>Window</h2>
       <label>Show / hide hotkey<span class="hint">Electron accelerator, e.g. <code>Control+Alt+Space</code>. Empty turns it off</span><input name="hotkey"></label>
@@ -67,11 +67,11 @@
       <div id="checks"></div>
       <h2>Accounts</h2>
       <div id="accounts"></div>
-      <h2>Widget hooks</h2>
-      <label class="check"><input type="checkbox" name="claudeHooks"> Add the widget's hooks and status line to each Claude session</label>
+      <h2>Gremlin hooks</h2>
+      <label class="check"><input type="checkbox" name="claudeHooks"> Add Gremlin's hooks and status line to each Claude session</label>
       <p class="hint-block">Worker rows, the "needs you" dot and the status footer come from Claude Code hooks. With this on, the
         widget passes them to the sessions it starts (<code>claude --settings</code>), so nothing has to be added to
-        <code>~/.claude/settings.json</code>. Your own status line keeps working: the widget wraps it. <span id="hooks-info"></span></p>
+        <code>~/.claude/settings.json</code>. Your own status line keeps working: Gremlin wraps it. <span id="hooks-info"></span></p>
       <p class="row setup-actions"><button type="button" id="btn-recheck">Check again</button><button type="button" id="btn-setup-done" class="primary">Done</button></p>
     </section>
   </form>
@@ -85,7 +85,7 @@
   <footer>
     <span id="status"></span>
     <button type="button" id="btn-json">Open config.json</button>
-    <button type="button" id="btn-restart" hidden>Restart widget</button>
+    <button type="button" id="btn-restart" hidden>Restart Gremlin</button>
     <button type="button" id="btn-save" class="primary">Save</button>
   </footer>
 
