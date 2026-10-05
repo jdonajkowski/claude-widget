@@ -105,8 +105,10 @@
           if (term.hasSelection()) widget.clipboard.write(term.getSelection());
           return false;
         }
-        // Ctrl+V / Ctrl+Shift+V paste (bracketed paste handled by xterm).
+        // Ctrl+V / Ctrl+Shift+V paste (bracketed paste handled by xterm). preventDefault stops the browser's
+        // own paste event, which xterm would turn into a second copy of the text.
         if (e.ctrlKey && key === 'v') {
+          e.preventDefault();
           widget.clipboard.read().then((text) => text && term.paste(text));
           return false;
         }
