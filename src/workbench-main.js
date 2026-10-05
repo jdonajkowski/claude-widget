@@ -210,13 +210,14 @@ function setupWorkbench(d) {
         buf = buf.slice(i + 1);
         let m;
         try { m = JSON.parse(line); } catch { continue; }
-        if (m.stage) send('bench:progress', m);
+        if (m.stage) { send('bench:progress', m); d.onBenchProgress(m); }
         if (m.result) result = m.result;
         if (m.error) error = m.error;
       }
     });
     child.on('close', () => {
       benchChild = null;
+      d.onBenchProgress({ done: true, failed: !result || !!error });
       if (!result || error) return resolve({ error: error || 'The benchmark stopped early' });
       const data = readBench();
       const run = { id: Date.now().toString(36), at: Date.now(), label: String(label || '').slice(0, 80) || `Run ${data.runs.length + 1}`, results: result };

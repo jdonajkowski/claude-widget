@@ -110,3 +110,13 @@ test('script outside the widget still consumes a large stdin cleanly', () => {
   assert.equal(r.error, undefined);
   assert.equal(r.status, 0);
 });
+
+test('task tools become task events', () => {
+  const base = { hook_event_name: 'PostToolUse', session_id: 's' };
+  assert.deepEqual(toEvents({ ...base, tool_name: 'TaskCreate', tool_input: { subject: 'alpha' }, tool_response: { task: { id: '1', subject: 'alpha' } } }, 5),
+    [{ t: 'task', id: '1', subject: 'alpha', status: 'pending', ts: 5, sid: 's' }]);
+  assert.deepEqual(toEvents({ ...base, tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'completed' }, tool_response: { success: true } }, 6),
+    [{ t: 'task', id: '1', status: 'completed', ts: 6, sid: 's' }]);
+  assert.deepEqual(toEvents({ ...base, tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'Fix it', activeForm: 'Fixing it', status: 'in_progress' }, { content: 'Test', status: 'pending' }] } }, 7),
+    [{ t: 'todos', items: [{ subject: 'Fixing it', status: 'in_progress' }, { subject: 'Test', status: 'pending' }], ts: 7, sid: 's' }]);
+});

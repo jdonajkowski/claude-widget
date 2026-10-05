@@ -41,6 +41,7 @@
       fiveHour: num(get(s, ['rate_limits', 'five_hour', 'used_percentage'])),
       sevenDay: num(get(s, ['rate_limits', 'seven_day', 'used_percentage'])),
       fiveHourResets: num(get(s, ['rate_limits', 'five_hour', 'resets_at'])),
+      sevenDayResets: num(get(s, ['rate_limits', 'seven_day', 'resets_at'])),
       cwd: get(s, ['workspace', 'current_dir']) || s.cwd || null
     };
   }
@@ -55,7 +56,24 @@
     if (epochSec === null) return '';
     const mins = Math.round((epochSec * 1000 - now) / 60000);
     if (mins <= 0) return '';
+    if (mins >= 1440) return `${Math.floor(mins / 1440)}d${Math.floor((mins % 1440) / 60)}h`;
     return mins >= 60 ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}` : `${mins}m`;
+  }
+
+  // How far through its window a rate limit is (0-100), from when it resets; null when unknown or past.
+  const HOUR = 3600000;
+  const WINDOWS = { fiveHour: 5 * HOUR, sevenDay: 7 * 24 * HOUR };
+  function windowPct(epochSec, now, spanMs) {
+    if (epochSec === null) return null;
+    const left = epochSec * 1000 - now;
+    if (left <= 0) return null;
+    return Math.round(Math.min(100, Math.max(0, ((spanMs - left) / spanMs) * 100)));
+  }
+
+  // 3.2G, or 1.8T from 1000G up.
+  function fmtBytes(bytes) {
+    const g = bytes / 1073741824;
+    return g >= 1000 ? `${(g / 1024).toFixed(1)}T` : `${g.toFixed(1)}G`;
   }
 
   function fmtGit(g) {
@@ -68,7 +86,7 @@
     return parts.join(' ');
   }
 
-  const api = { summarize, fmtTokens, fmtDuration, fmtResets, fmtGit, level };
+  const api = { summarize, fmtTokens, fmtDuration, fmtResets, fmtGit, fmtBytes, level, windowPct, WINDOWS };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WidgetFooter = api;
 })(this);

@@ -42,15 +42,28 @@
         <div id="side-mini" title="Show panel (Ctrl+Shift+W)"><span class="chev">‹</span><span id="mini-count" class="idle"></span><span id="mini-turn"></span></div>
         <div id="workers-head"><span class="title">Workers</span><span id="workers-count" class="idle">idle</span><button id="side-toggle" title="Collapse panel (Ctrl+Shift+W)">›</button></div>
         <div id="workers"></div>
+        <div id="jobs" hidden>
+          <div id="j-tasks" hidden title="Claude's task list">
+            <div class="f-row" id="j-tasks-row"><span class="s-label">tasks</span><span class="meter"><i id="j-tasks-m"></i></span><span id="j-tasks-t" class="right"></span></div>
+            <div id="j-tasks-now"></div>
+          </div>
+          <div class="f-row" id="j-bench" hidden title="Benchmark running (Workbench → Monitor &amp; snapshots)"><span class="s-label">bench</span><span class="meter"><i id="j-bench-m"></i></span><span id="j-bench-t" class="right"></span></div>
+          <div id="j-runs"></div>
+        </div>
         <div id="sysmon" hidden>
           <div class="f-row"><span class="s-label">cpu</span><span class="meter"><i id="s-cpu"></i></span><span id="s-cpu-t" class="right"></span></div>
+          <div class="f-row" id="s-temp-row" hidden title="CPU temperature (bar: 30-100 °C)"><span class="s-label">temp</span><span class="meter"><i id="s-temp"></i></span><span id="s-temp-t" class="right"></span></div>
           <div class="f-row"><span class="s-label">mem</span><span class="meter"><i id="s-mem"></i></span><span id="s-mem-t" class="right"></span></div>
           <div class="f-row" id="s-gpu-row" hidden><span class="s-label">gpu</span><span class="meter"><i id="s-gpu"></i></span><span id="s-gpu-t" class="right"></span></div>
+          <div class="f-row" id="s-vram-row" hidden title="GPU memory"><span class="s-label">vram</span><span class="meter"><i id="s-vram"></i></span><span id="s-vram-t" class="right"></span></div>
+          <div class="f-row" id="s-disk-row" hidden><span class="s-label">disk</span><span class="meter"><i id="s-disk"></i></span><span id="s-disk-t" class="right"></span></div>
         </div>
         <div id="footer" hidden>
           <div class="f-row"><span id="f-model"></span><span id="f-cost" class="right"></span></div>
-          <div class="f-row" id="f-ctx-row"><span>ctx</span><span class="meter"><i id="f-meter"></i></span><span id="f-ctx" class="right"></span></div>
-          <div class="f-row" id="f-limits"><span id="f-5h"></span><span id="f-7d" class="right"></span></div>
+          <div class="f-row" id="f-ctx-row"><span class="s-label">ctx</span><span class="meter"><i id="f-meter"></i></span><span id="f-ctx" class="right"></span></div>
+          <div class="f-row" id="f-5h-row" hidden title="5-hour usage limit"><span class="s-label">5h</span><span class="meter"><i id="f-5h-m"></i></span><span id="f-5h" class="right"></span></div>
+          <div class="f-row" id="f-blk-row" hidden title="Time through the 5-hour window. Usage ahead of this bar means you will hit the limit before it resets"><span class="s-label">time</span><span class="meter"><i id="f-blk-m"></i></span><span id="f-blk" class="right"></span></div>
+          <div class="f-row" id="f-7d-row" hidden title="Weekly usage limit"><span class="s-label">7d</span><span class="meter"><i id="f-7d-m"></i></span><span id="f-7d" class="right"></span></div>
           <div class="f-row"><span id="f-git"></span><span id="f-turn" class="right"></span></div>
         </div>
       </aside>

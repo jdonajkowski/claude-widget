@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld('widget', {
   sys: {
     onSample: on('sys:sample')
   },
+  bench: {
+    onProgress: on('bench:progress')
+  },
   side: {
     setCollapsed: (collapsed) => ipcRenderer.send('side:setCollapsed', collapsed)
   },

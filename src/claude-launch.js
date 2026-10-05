@@ -10,7 +10,8 @@ const HOOK_EVENTS = [
   ['SubagentStop'],
   ['Stop'],
   ['Notification'],
-  ['PostToolUse', 'Bash|PowerShell']
+  ['PostToolUse', 'Bash|PowerShell'],
+  ['PostToolUse', 'TodoWrite|TaskCreate|TaskUpdate']
 ];
 
 // First match of any of names in the PATH directories, or null.
@@ -83,8 +84,11 @@ function runtime({ node, execPath, isWin, gitBash }) {
 }
 
 const mentions = (obj, needle) => JSON.stringify(obj || {}).includes(needle);
+// Whether global settings already run script for this event and matcher (setups that predate a matcher get it added).
+const wired = (global, event, matcher, script) => ((global.hooks || {})[event] || [])
+  .some((e) => (e.matcher || '') === (matcher || '') && mentions(e.hooks, script));
 
-// Settings for --settings, or null when ~/.claude/settings.json already wires up both (older setup).
+// Settings for --settings, or null when ~/.claude/settings.json already wires up all of it (older setup).
 // guard: also add hooks/guard-hook.js (system change safety net) before and after Bash/PowerShell commands.
 function sessionSettings({ hooksDir, execPath, node, isWin, gitBash, global = {}, guard = true }) {
   const rt = runtime({ node, execPath, isWin, gitBash });
@@ -96,10 +100,8 @@ function sessionSettings({ hooksDir, execPath, node, isWin, gitBash, global = {}
     if (entry) entry.hooks.push(hook);
     else list.push({ ...(matcher ? { matcher } : {}), hooks: [hook] });
   };
-  if (!mentions(global.hooks, 'workers-hook.js')) {
-    const hook = rt.hook(path.join(hooksDir, 'workers-hook.js'));
-    for (const [event, matcher] of HOOK_EVENTS) add(event, matcher, hook);
-  }
+  const hook = rt.hook(path.join(hooksDir, 'workers-hook.js'));
+  for (const [event, matcher] of HOOK_EVENTS) if (!wired(global, event, matcher, 'workers-hook.js')) add(event, matcher, hook);
   if (guard && !mentions(global.hooks, 'guard-hook.js')) {
     const script = path.join(hooksDir, 'guard-hook.js');
     add('PreToolUse', 'Bash|PowerShell', rt.hook(script, { sync: true }));

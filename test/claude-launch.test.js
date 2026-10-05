@@ -59,12 +59,28 @@ test('sessionSettings adds every hook event and wraps the user status line', () 
 });
 
 test('sessionSettings leaves out what global settings already wire up', () => {
+  const w = { type: 'command', command: 'node "C:/x/hooks/workers-hook.js"' };
+  const everyHook = {
+    ...Object.fromEntries(['SubagentStart', 'SubagentStop', 'Stop', 'Notification'].map((e) => [e, [{ hooks: [w] }]])),
+    PostToolUse: ['Bash|PowerShell', 'TodoWrite|TaskCreate|TaskUpdate'].map((matcher) => ({ matcher, hooks: [w] }))
+  };
   const global = {
-    hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node "C:/x/hooks/workers-hook.js"' }] }] },
+    hooks: everyHook,
     statusLine: { type: 'command', command: 'node "C:/x/hooks/statusline-tee.js" npx ccstatusline' }
   };
   assert.equal(sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global, guard: false }).settings, null);
-  assert.deepEqual(Object.keys(sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global }).settings.hooks), ['PreToolUse', 'PostToolUse']);
+  assert.deepEqual(Object.keys(sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global: { ...global, hooks: everyHook } }).settings.hooks), ['PreToolUse', 'PostToolUse']);
+});
+
+test('sessionSettings adds hook matchers an older global setup lacks', () => {
+  const w = { type: 'command', command: 'node "C:/x/hooks/workers-hook.js"' };
+  const global = {
+    hooks: Object.fromEntries(['SubagentStart', 'SubagentStop', 'Stop', 'Notification'].map((e) => [e, [{ hooks: [w] }]])),
+    statusLine: { type: 'command', command: 'node "C:/x/hooks/statusline-tee.js"' }
+  };
+  global.hooks.PostToolUse = [{ matcher: 'Bash|PowerShell', hooks: [w] }];
+  const { settings } = sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global, guard: false });
+  assert.deepEqual(settings.hooks, { PostToolUse: [{ matcher: 'TodoWrite|TaskCreate|TaskUpdate', hooks: [{ type: 'command', command: 'node "C:/App/resources/app/hooks/workers-hook.js"' }] }] });
 });
 
 test('the guard hook runs in the foreground, the others in the background, under PowerShell', () => {

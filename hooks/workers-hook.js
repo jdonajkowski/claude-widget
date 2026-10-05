@@ -1,5 +1,6 @@
 // Claude Code hook that feeds the Claude Widget's worker rows.
-// Registered for SubagentStart, SubagentStop, Stop, Notification and PostToolUse (Bash|PowerShell).
+// Registered for SubagentStart, SubagentStop, Stop, Notification and PostToolUse (Bash|PowerShell, and
+// TodoWrite|TaskCreate|TaskUpdate for the task list progress bar).
 // Appends JSON lines to the file named by CLAUDE_WIDGET_WORKERS, which only the widget sets.
 // Must never block Claude or print into the session: always exits 0, writes nothing to stdout/stderr.
 const fs = require('fs');
@@ -33,6 +34,29 @@ function toEvents(p, ts) {
   return typeof p.session_id === 'string' ? events.map((e) => ({ ...e, sid: p.session_id })) : events;
 }
 
+// Claude's task list (checked against Claude Code 2.1.289): TaskCreate answers { task: { id, subject } },
+// TaskUpdate takes { taskId, status, subject? }, TodoWrite sends the whole list as { todos: [{ content, status }] }.
+function taskEvent(p, ts) {
+  const input = p.tool_input || {};
+  if (p.tool_name === 'TaskCreate') {
+    const id = get(p, ['tool_response', 'task', 'id']);
+    if (id === undefined || id === null) return null;
+    return { t: 'task', id: String(id), subject: clip(get(p, ['tool_response', 'task', 'subject']) || input.subject || ''), status: 'pending', ts };
+  }
+  if (p.tool_name === 'TaskUpdate') {
+    const id = input.taskId ?? get(p, ['tool_response', 'taskId']);
+    if (id === undefined || id === null) return null;
+    const status = input.status || get(p, ['tool_response', 'statusChange', 'to']);
+    return { t: 'task', id: String(id), ...(status ? { status } : {}), ...(input.subject ? { subject: clip(input.subject) } : {}), ts };
+  }
+  if (p.tool_name === 'TodoWrite' && Array.isArray(input.todos)) {
+    const items = input.todos.filter((x) => x && typeof x === 'object')
+      .map((x) => ({ subject: clip(x.status === 'in_progress' && x.activeForm ? x.activeForm : x.content || ''), status: String(x.status || 'pending') }));
+    return { t: 'todos', items, ts };
+  }
+  return null;
+}
+
 function eventsFor(p, ts) {
   switch (p.hook_event_name) {
     case 'SubagentStart':
@@ -47,6 +71,8 @@ function eventsFor(p, ts) {
       return counted ? [{ t: 'attention', reason: clip(type || p.message), ts }] : [];
     }
     case 'PostToolUse': {
+      const task = taskEvent(p, ts);
+      if (task) return [task];
       if (!get(p, ['tool_input', 'run_in_background'])) return [];
       const id = TASK_ID_PATHS.map((k) => get(p, k)).find((v) => typeof v === 'string' && v);
       return id ? [{ t: 'start', id, kind: 'shell', label: clip(get(p, ['tool_input', 'command']) || p.tool_name), ts }] : [];

@@ -12,6 +12,9 @@ function createAux({ pty, isWin, send, startElevated = null, onUrl = () => {}, o
 
   function spawnTerm(a, cols, rows) {
     a.urlFound = false;
+    a.exitCode = null;
+    a.startedAt = Date.now();
+    a.endedAt = null;
     a.tail = '';
     try {
       a.term = a.elevated && startElevated
@@ -20,6 +23,8 @@ function createAux({ pty, isWin, send, startElevated = null, onUrl = () => {}, o
     } catch (err) {
       a.term = null;
       a.running = false;
+      a.exitCode = -1;
+      a.endedAt = Date.now();
       send('pty:data', { id: a.id, data: `\r\n\x1b[31mFailed to start ${a.launch.file}: ${err.message}\x1b[0m\r\n` });
       send('pty:exit', { id: a.id, code: -1 });
       onChange();
@@ -40,6 +45,8 @@ function createAux({ pty, isWin, send, startElevated = null, onUrl = () => {}, o
       if (a.term !== current) return;
       a.term = null;
       a.running = false;
+      a.exitCode = exitCode;
+      a.endedAt = Date.now();
       send('pty:exit', { id: a.id, code: exitCode });
       onChange();
     });
@@ -75,7 +82,7 @@ function createAux({ pty, isWin, send, startElevated = null, onUrl = () => {}, o
     close: (id) => { const a = terms.get(id); if (!a) return false; terms.delete(id); kill(a); onChange(); return true; },
     closeProject: (projectId) => { for (const a of [...terms.values()]) if (a.projectId === projectId) { terms.delete(a.id); kill(a); } onChange(); },
     closeAll: () => { for (const a of terms.values()) kill(a); terms.clear(); },
-    list: () => [...terms.values()].map((a) => ({ id: a.id, projectId: a.projectId, title: a.title, kind: a.kind, running: a.running }))
+    list: () => [...terms.values()].map((a) => ({ id: a.id, projectId: a.projectId, title: a.title, kind: a.kind, running: a.running, exitCode: a.exitCode, startedAt: a.startedAt, endedAt: a.endedAt }))
   };
 }
 

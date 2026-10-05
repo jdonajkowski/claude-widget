@@ -86,3 +86,28 @@ test('SubagentStop snapshot finishes shells but not agents', () => {
   assert.equal(w.find((x) => x.id === 's1').doneAt, 2000);
   assert.equal(w.find((x) => x.id === 'a1').doneAt, null);
 });
+
+test('tasks counts TaskCreate/TaskUpdate events of the newest session', () => {
+  const { tasks, TASKS_DONE_TTL_MS } = require('../src/workers');
+  const ev = [
+    { t: 'task', id: '1', subject: 'old', status: 'pending', ts: 1, sid: 'a' },
+    { t: 'task', id: '1', subject: 'alpha', status: 'pending', ts: 2, sid: 'b' },
+    { t: 'task', id: '2', subject: 'beta', status: 'pending', ts: 3, sid: 'b' },
+    { t: 'task', id: '3', subject: 'gamma', status: 'pending', ts: 4, sid: 'b' },
+    { t: 'task', id: '1', status: 'completed', ts: 5, sid: 'b' },
+    { t: 'task', id: '2', status: 'in_progress', ts: 6, sid: 'b' },
+    { t: 'task', id: '3', status: 'deleted', ts: 7, sid: 'b' }
+  ];
+  const r = tasks(ev, 10);
+  assert.deepEqual([r.done, r.total, r.current], [1, 2, 'beta']);
+  const finished = ev.concat({ t: 'task', id: '2', status: 'completed', ts: 8, sid: 'b' });
+  assert.equal(tasks(finished, 9).done, 2);
+  assert.equal(tasks(finished, 8 + TASKS_DONE_TTL_MS + 1), null);
+  assert.equal(tasks([{ t: 'start', id: 'x', kind: 'agent', ts: 1 }], 2), null);
+});
+
+test('tasks takes a TodoWrite list as a whole', () => {
+  const { tasks } = require('../src/workers');
+  const r = tasks([{ t: 'todos', items: [{ subject: 'a', status: 'completed' }, { subject: 'Doing b', status: 'in_progress' }, { subject: 'c', status: 'pending' }], ts: 1 }], 2);
+  assert.deepEqual([r.done, r.total, r.current], [1, 3, 'Doing b']);
+});

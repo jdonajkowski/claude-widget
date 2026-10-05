@@ -32,10 +32,14 @@ test('a task tab relays output, finds the dev server URL once, and reports its e
   t.data.forEach((cb) => cb('5173/\r\n'));
   t.data.forEach((cb) => cb('http://localhost:9999/'));
   assert.deepEqual(urls, [['aux:1', 'http://localhost:5173/']]);
-  assert.deepEqual(aux.list(), [{ id: 'aux:1', projectId: 'p', title: 'npm run dev', kind: 'task', running: true }]);
+  const { startedAt, ...listed } = aux.list()[0];
+  assert.deepEqual(listed, { id: 'aux:1', projectId: 'p', title: 'npm run dev', kind: 'task', running: true, exitCode: null, endedAt: null });
+  assert.equal(typeof startedAt, 'number');
   t.exit.forEach((cb) => cb({ exitCode: 0 }));
   assert.deepEqual(sent.at(-1), ['pty:exit', { id: 'aux:1', code: 0 }]);
   assert.equal(aux.list()[0].running, false);
+  assert.equal(aux.list()[0].exitCode, 0);
+  assert.equal(typeof aux.list()[0].endedAt, 'number');
 });
 
 test('restart replaces the PTY; closing a project closes its tabs', () => {

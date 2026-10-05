@@ -21,7 +21,7 @@ const sample = {
 test('summarize reads the statusLine fields', () => {
   assert.deepEqual(summarize(sample), {
     model: 'Opus 5.5', effort: 'medium', cost: 0.81378, ctxPct: 8, ctxTokens: 80660, ctxSize: 1000000,
-    fiveHour: 40, sevenDay: 9, fiveHourResets: 1000, cwd: 'C:\\x\\y'
+    fiveHour: 40, sevenDay: 9, fiveHourResets: 1000, sevenDayResets: 2000, cwd: 'C:\\x\\y'
   });
 });
 
@@ -43,6 +43,7 @@ test('formats tokens, durations and reset times', () => {
   assert.equal(fmtDuration(3723000), '1:02:03');
   assert.equal(fmtResets(3600 + 5 * 60, 0), '1h05');
   assert.equal(fmtResets(600, 0), '10m');
+  assert.equal(fmtResets(3 * 86400 + 2 * 3600, 0), '3d2h');
   assert.equal(fmtResets(10, 20000), '');
 });
 
@@ -65,4 +66,14 @@ test('parses git porcelain v2 branch output', () => {
 test('clean branch without upstream shows a check', () => {
   assert.equal(fmtGit(git.parse('# branch.head feat\n')), 'feat ✓');
   assert.equal(fmtGit(null), null);
+});
+
+test('windowPct is how far through a rate limit window we are', () => {
+  const { windowPct, WINDOWS, fmtBytes } = require('../src/footer');
+  const now = 1_000_000_000_000;
+  assert.equal(windowPct(now / 1000 + 3600, now, WINDOWS.fiveHour), 80);
+  assert.equal(windowPct(now / 1000 - 1, now, WINDOWS.fiveHour), null);
+  assert.equal(windowPct(null, now, WINDOWS.fiveHour), null);
+  assert.equal(fmtBytes(512 * 1073741824), '512.0G');
+  assert.equal(fmtBytes(2048 * 1073741824), '2.0T');
 });

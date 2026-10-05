@@ -41,4 +41,22 @@ const isLocalUrl = (u) => {
   }
 };
 
-module.exports = { toUrl, isLocalUrl };
+// What `widget-open <target>` (bin/) asked for: --open=<target> in a second instance's argv (one token,
+// since Chromium reorders switches and their separate values). URLs pass through; a relative file path is
+// taken from the folder the command ran in.
+function openTarget(argv, cwd) {
+  const arg = (argv || []).find((a) => String(a).startsWith('--open='));
+  const t = arg ? String(arg).slice('--open='.length).trim() : '';
+  if (!t) return null;
+  if (/^[a-z][\w+.-]*:/i.test(t) && !/^[a-z]:[\\/]/i.test(t)) return t; // a URL or host:port (but not C:\...)
+  if (LOCAL_HOST.test(t)) return t;
+  return cwd ? path.resolve(cwd, t) : t;
+}
+
+// env with dir put first on PATH, keeping the variable's own spelling (Windows has "Path").
+function prependPath(env, dir, isWin = process.platform === 'win32') {
+  const key = Object.keys(env).find((k) => (isWin ? k.toUpperCase() === 'PATH' : k === 'PATH')) || 'PATH';
+  return { [key]: env[key] ? `${dir}${isWin ? ';' : ':'}${env[key]}` : dir };
+}
+
+module.exports = { toUrl, isLocalUrl, openTarget, prependPath };

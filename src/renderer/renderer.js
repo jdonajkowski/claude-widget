@@ -205,6 +205,7 @@
     for (const a of auxList) if (!ids.has(a.id)) terminals.destroy(a.id);
     for (const a of list) if (!terminals.has(a.id)) terminals.create(a.id);
     auxList = list;
+    renderJobs();
     for (const [p, v] of viewOf) if (isAux(v) && !ids.has(v)) viewOf.delete(p);
     // A closed tab that was in front: show the project's Claude session again.
     if (activeId && terminals.has(shownView())) {
@@ -233,6 +234,7 @@
     rowEls.clear();
     renderProgress();
     renderWorkers();
+    renderJobs();
     renderFooter();
     renderRail();
   }
@@ -271,7 +273,8 @@
   const footerEl = $('footer');
   let workerCount = 0;
   const sysEl = $('sysmon');
-  const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden && sysEl.hidden; };
+  const jobsEl = $('jobs');
+  const updateSide = () => { sideEl.hidden = workerCount === 0 && footerEl.hidden && sysEl.hidden && jobsEl.hidden; };
 
   // Collapsed, the panel is a slim strip with the running-worker count and a turn indicator.
   let sideCollapsed = !!cfg.sideCollapsed;
@@ -284,6 +287,7 @@
   $('side-toggle').onclick = () => { setSideCollapsed(true); terminals.focus(); };
   $('side-mini').onclick = () => { setSideCollapsed(false); terminals.focus(); };
 
+  const meterTo = (el, pct) => { el.style.width = `${Math.min(100, Math.max(0, pct))}%`; setLevel(el, pct); };
   const setLevel = (el, pct) => {
     el.classList.remove('warm', 'hot');
     const lv = WidgetFooter.level(pct);
@@ -307,13 +311,22 @@
       const size = s.ctxSize ? `/${WidgetFooter.fmtTokens(s.ctxSize)}` : '';
       $('f-ctx').textContent = `${s.ctxPct}% ${WidgetFooter.fmtTokens(s.ctxTokens)}${size}`;
     }
-    $('f-limits').hidden = !s || (s.fiveHour === null && s.sevenDay === null);
-    if (s) {
-      const resets = WidgetFooter.fmtResets(s.fiveHourResets, now);
-      $('f-5h').textContent = s.fiveHour === null ? '' : `5h ${s.fiveHour}%${resets ? ` · resets ${resets}` : ''}`;
-      $('f-7d').textContent = s.sevenDay === null ? '' : `7d ${s.sevenDay}%`;
-      setLevel($('f-5h'), s.fiveHour);
-      setLevel($('f-7d'), s.sevenDay);
+    // Rate limits, plus how far through the 5-hour window we are: usage running ahead of time hits the limit early.
+    const limit = (key, pct, resetsAt) => {
+      $(`f-${key}-row`).hidden = pct === null;
+      if (pct === null) return;
+      meterTo($(`f-${key}-m`), pct);
+      setLevel($(`f-${key}`), pct);
+      const resets = WidgetFooter.fmtResets(resetsAt, now);
+      $(`f-${key}`).textContent = `${Math.round(pct)}%${key === '7d' && resets ? ` · ${resets}` : ''}`;
+    };
+    limit('5h', s ? s.fiveHour : null, s && s.fiveHourResets);
+    limit('7d', s ? s.sevenDay : null, s && s.sevenDayResets);
+    const blk = s && s.fiveHour !== null ? WidgetFooter.windowPct(s.fiveHourResets, now, WidgetFooter.WINDOWS.fiveHour) : null;
+    $('f-blk-row').hidden = blk === null;
+    if (blk !== null) {
+      $('f-blk-m').style.width = `${blk}%`;
+      $('f-blk').textContent = `${WidgetFooter.fmtResets(s.fiveHourResets, now)} left`;
     }
     $('f-git').textContent = WidgetFooter.fmtGit(git) || '';
     $('f-git').title = (s && s.cwd) || '';
@@ -337,6 +350,54 @@
     }
   }
 
+  // --- Progress rows: Claude's task list, the benchmark, Run-menu tasks of the active project ---
+  let bench = null; // { label, step, of } while a benchmark runs, { done: true, at } just after
+  widget.bench.onProgress((m) => {
+    bench = m.done ? { ...bench, done: true, failed: !!m.failed, at: Date.now() } : m;
+    renderJobs();
+  });
+  const runEls = new Map();
+  function renderJobs() {
+    const now = Date.now();
+    const t = activeId ? WidgetWorkers.tasks(sess(activeId).workerEvents, now) : null;
+    $('j-tasks').hidden = !t;
+    if (t) {
+      meterTo($('j-tasks-m'), (t.done / t.total) * 100);
+      $('j-tasks-m').classList.remove('warm', 'hot');
+      $('j-tasks-t').textContent = `${t.done}/${t.total}`;
+      $('j-tasks-now').textContent = t.current ? `▸ ${t.current}` : '';
+      $('j-tasks').title = t.all.map((x) => `${x.status === 'completed' ? '✓' : x.status === 'in_progress' ? '▸' : '·'} ${x.subject}`).join('\n');
+    }
+    if (bench && bench.done && now - bench.at > 4000) bench = null;
+    $('j-bench').hidden = !bench;
+    if (bench) {
+      const pct = bench.done ? 100 : ((bench.step - 1) / bench.of) * 100;
+      $('j-bench-m').style.width = `${pct}%`;
+      $('j-bench-t').textContent = bench.done ? (bench.failed ? 'stopped' : 'done') : `${bench.label} ${bench.step}/${bench.of}`;
+    }
+    const runs = auxList.filter((a) => a.projectId === activeId && a.kind === 'task');
+    const keep = new Set(runs.map((a) => a.id));
+    for (const [id, el] of runEls) if (!keep.has(id)) { el.remove(); runEls.delete(id); }
+    for (const a of runs) {
+      let el = runEls.get(a.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.innerHTML = '<span class="s-label"></span><span class="meter"><i></i></span><span class="right"></span>';
+        el.onclick = () => { showView(a.id); terminals.focus(); };
+        runEls.set(a.id, el);
+        $('j-runs').appendChild(el);
+      }
+      const state = a.running ? 'running' : a.exitCode === 0 ? 'ok' : 'failed';
+      el.className = `f-row j-run ${state}`;
+      el.querySelector('.s-label').textContent = a.title;
+      const took = a.startedAt ? fmtElapsed((a.endedAt || now) - a.startedAt) : '';
+      el.querySelector('.right').textContent = state === 'running' ? took : state === 'ok' ? `✓ ${took}` : `exit ${a.exitCode ?? '?'}`;
+      el.title = `${a.title}: ${state === 'running' ? 'running' : state === 'ok' ? 'finished' : 'failed'}. Click to show its tab`;
+    }
+    jobsEl.hidden = !t && !bench && !runs.length;
+    updateSide();
+  }
+
   // --- System monitor strip (src/sysmon.js samples in the main process) ---
   let showSysmon = cfg.showSysmon;
   const pctOf = (used, total) => (total ? Math.round((used / total) * 100) : 0);
@@ -344,9 +405,15 @@
   widget.sys.onSample((smp) => {
     sysEl.hidden = !showSysmon;
     if (!showSysmon) return updateSide();
-    const meter = (id, pct) => { const m = $(id); m.style.width = `${pct}%`; setLevel(m, pct); };
+    const meter = (id, pct) => meterTo($(id), pct);
     meter('s-cpu', smp.cpu.pct);
-    $('s-cpu-t').textContent = `${smp.cpu.pct}%${smp.cpuTemp !== null ? ` · ${Math.round(smp.cpuTemp)}°C` : ''}`;
+    $('s-cpu-t').textContent = `${smp.cpu.pct}%`;
+    // CPU temperature on a 30-100 °C scale, so warm (60%) is 72 °C and hot (85%) about 90 °C.
+    $('s-temp-row').hidden = smp.cpuTemp === null;
+    if (smp.cpuTemp !== null) {
+      meter('s-temp', Math.round(((smp.cpuTemp - 30) / 70) * 100));
+      $('s-temp-t').textContent = `${Math.round(smp.cpuTemp)}°C`;
+    }
     const memPct = pctOf(smp.mem.used, smp.mem.total);
     meter('s-mem', memPct);
     $('s-mem-t').textContent = `${gb(smp.mem.used)}/${gb(smp.mem.total)}`;
@@ -356,6 +423,18 @@
       meter('s-gpu', g.util || 0);
       $('s-gpu-t').textContent = `${g.util ?? '–'}%${g.temp !== null ? ` · ${g.temp}°C` : ''}`;
       $('s-gpu-row').title = g.name;
+    }
+    const vram = g && g.memTotal ? g : null;
+    $('s-vram-row').hidden = !vram;
+    if (vram) {
+      meter('s-vram', pctOf(vram.memUsed || 0, vram.memTotal));
+      $('s-vram-t').textContent = `${((vram.memUsed || 0) / 1024).toFixed(1)}/${(vram.memTotal / 1024).toFixed(1)}G`;
+    }
+    $('s-disk-row').hidden = !smp.disk;
+    if (smp.disk) {
+      meter('s-disk', pctOf(smp.disk.used, smp.disk.total));
+      $('s-disk-t').textContent = `${WidgetFooter.fmtBytes(smp.disk.used)}/${WidgetFooter.fmtBytes(smp.disk.total)}`;
+      $('s-disk-row').title = `Disk space used on ${smp.disk.path}`;
     }
     sysEl.title = `${smp.cpu.model} (${smp.cpu.count} threads)${smp.cpuTemp === null ? '\nCPU temperature: not available (on Windows it needs LibreHardwareMonitor running)' : ''}\nClick for the full monitor`;
     updateSide();
@@ -431,7 +510,7 @@
     s.workerEvents = s.workerEvents.concat(events);
     // Permission prompts and questions (hooks/workers-hook.js) turn the row's dot to "needs you".
     if (events.some((e) => e && e.t === 'attention')) update(id, { t: 'attention' });
-    if (id === activeId) renderWorkers();
+    if (id === activeId) { renderWorkers(); renderJobs(); }
   });
 
   // Elapsed times in the worker rows and the turn timer tick once a second.
@@ -440,7 +519,10 @@
     const s = sess(activeId);
     if (s.workerEvents.length) renderWorkers();
     if (s.turnStart !== null) renderFooter();
+    if (!jobsEl.hidden) renderJobs();
   }, 1000);
+  // The 5-hour window bar and reset times move even while the session is idle.
+  setInterval(() => { if (activeId) renderFooter(); }, 30000);
 
   // Debounced so a burst of size changes (window drag, rail or worker panel opening) resizes the PTY once.
   let fitTimer;

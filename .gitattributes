@@ -1,2 +1,5 @@
 # Shell scripts run in bash (Linux, WSL): keep LF even in a Windows checkout.
 *.sh text eol=lf
+bin/widget-open text eol=lf
+bin/*.cmd text eol=crlf
+bin/*.ps1 text eol=crlf

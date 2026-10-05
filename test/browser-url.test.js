@@ -35,3 +35,20 @@ test('isLocalUrl spots dev servers', () => {
   assert.equal(isLocalUrl('https://example.com'), false);
   assert.equal(isLocalUrl('not a url'), false);
 });
+
+test('openTarget reads --open from a second instance argv', () => {
+  const { openTarget } = require('../src/browser-url');
+  const exe = ['/opt/w/claude-widget', '--allow-file-access'];
+  assert.equal(openTarget([...exe, '--open=http://localhost:5173/?a=b'], '/p'), 'http://localhost:5173/?a=b');
+  assert.equal(openTarget(['--open=localhost:3000', ...exe], '/p'), 'localhost:3000');
+  assert.equal(openTarget([...exe, '--open=mock/index.html'], '/p'), require('path').resolve('/p', 'mock/index.html'));
+  assert.equal(openTarget(['/opt/w/claude-widget'], '/p'), null);
+  assert.equal(openTarget([...exe, '--open='], '/p'), null);
+});
+
+test('prependPath keeps the PATH variable spelling', () => {
+  const { prependPath } = require('../src/browser-url');
+  assert.deepEqual(prependPath({ Path: 'C:/x' }, 'C:/bin', true), { Path: 'C:/bin;C:/x' });
+  assert.deepEqual(prependPath({ PATH: '/usr/bin' }, '/b', false), { PATH: '/b:/usr/bin' });
+  assert.deepEqual(prependPath({}, '/b', false), { PATH: '/b' });
+});

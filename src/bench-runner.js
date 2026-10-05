@@ -1,5 +1,5 @@
 // Quick before/after benchmark, run as a separate Node process (the widget's executable with
-// ELECTRON_RUN_AS_NODE). Prints one JSON line per stage ({ stage, label }) and a final { result }.
+// ELECTRON_RUN_AS_NODE). Prints one JSON line per stage ({ stage, label, step, of }) and a final { result }.
 // About 10 seconds: single-core and all-core hashing, memory copy speed, disk writes.
 const crypto = require('crypto');
 const fs = require('fs');
@@ -82,15 +82,15 @@ if (!isMainThread) {
     const dir = process.argv[2] || os.tmpdir();
     const result = {};
     try {
-      say({ stage: 'cpu1', label: 'Single core' });
+      say({ stage: 'cpu1', label: 'Single core', step: 1, of: 5 });
       result.cpu1 = hashFor(2000);
-      say({ stage: 'cpuN', label: 'All cores' });
+      say({ stage: 'cpuN', label: 'All cores', step: 2, of: 5 });
       result.cpuN = await allCores(2500);
-      say({ stage: 'mem', label: 'Memory' });
+      say({ stage: 'mem', label: 'Memory', step: 3, of: 5 });
       result.mem = memCopy(1500);
-      say({ stage: 'diskW', label: 'Disk write' });
+      say({ stage: 'diskW', label: 'Disk write', step: 4, of: 5 });
       result.diskW = diskWrite(dir);
-      say({ stage: 'diskSync', label: 'Disk flushes' });
+      say({ stage: 'diskSync', label: 'Disk flushes', step: 5, of: 5 });
       result.diskSync = diskSync(dir, 1500);
       say({ result });
     } catch (err) {

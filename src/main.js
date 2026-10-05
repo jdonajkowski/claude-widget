@@ -12,7 +12,7 @@ const settingsLib = require('./settings');
 const launch = require('./claude-launch');
 const setupChecks = require('./setup-checks');
 const { createBrowser } = require('./browser-window');
-const { isLocalUrl } = require('./browser-url');
+const { isLocalUrl, openTarget, prependPath } = require('./browser-url');
 const { createAux } = require('./aux-sessions');
 const { startElevated } = require('./admin-shell');
 const tasks = require('./tasks');
@@ -122,6 +122,14 @@ const claudeSettingsPath = path.join(userDir, 'claude-settings.json');
 // Claude Code's config folder for widget sessions: config.claudeConfigDir, else ~/.claude.
 const claudeDir = () => dataDirs.expandHome(config.claudeConfigDir, os.homedir()) || path.join(os.homedir(), '.claude');
 const claudeEnv = () => (config.claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeDir() } : {});
+// `widget-open <url-or-file>` (bin/) in every session and tab: runs this executable with --open, which the
+// running widget gets as a second instance and shows in the built-in browser. Unpackaged, Electron needs the app folder.
+const binDir = path.join(__dirname, '..', 'bin');
+const openEnv = () => ({
+  ...prependPath(process.env, binDir, isWin),
+  CLAUDE_WIDGET_EXE: process.execPath,
+  ...(app.isPackaged ? {} : { CLAUDE_WIDGET_APP: path.join(__dirname, '..') })
+});
 const globalClaudeSettings = () => readJson(path.join(claudeDir(), 'settings.json'), {});
 // The guard hook's change log and file/registry backups (see hooks/guard-hook.js).
 const changesDir = path.join(userDir, 'changes');
@@ -164,7 +172,7 @@ const sessions = createSessions({
   send,
   settingsFile: writeSessionSettings,
   claudeDir,
-  extraEnv: () => ({ ...claudeEnv(), ...guardEnv() }),
+  extraEnv: () => ({ ...claudeEnv(), ...guardEnv(), ...openEnv() }),
   onStatus: (id) => { if (id === activeId) pollGit(); }
 });
 
@@ -180,7 +188,7 @@ const aux = createAux({
   },
   onChange: () => send('aux:list', aux.list())
 });
-const auxEnv = () => ({ ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...claudeEnv(), ...guardEnv(), ...config.env });
+const auxEnv = () => ({ ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...claudeEnv(), ...guardEnv(), ...openEnv(), ...config.env });
 
 // kind: task (runs command), shell, admin (elevated shell), admin-claude (elevated Claude session, Windows).
 function openAux(projectId, { kind, title, command }) {
@@ -1286,6 +1294,7 @@ const workbench = setupWorkbench({
   spawnDetached,
   which,
   benchDir: () => userDir,
+  onBenchProgress: (m) => send('bench:progress', m),
   sendToSession,
   ccusageCommand,
   addProject,
@@ -1374,7 +1383,9 @@ function createTray() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_e, argv, cwd) => {
+    const target = openTarget(argv, cwd);
+    if (target) return browser.open(target);
     if (!win) return createWindow();
     win.show();
     win.focus();
@@ -1387,6 +1398,8 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => openSettings('setup'), 600));
     registerHotkey(config.hotkey);
+    const target = openTarget(process.argv, process.cwd());
+    if (target) win.once('ready-to-show', () => browser.open(target));
   });
 
   app.on('will-quit', () => {

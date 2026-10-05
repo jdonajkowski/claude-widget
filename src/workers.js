@@ -32,7 +32,36 @@
       .sort((a, b) => a.startedAt - b.startedAt);
   }
 
-  const api = { reduce, DONE_TTL_MS, SNAPSHOT_KINDS };
+  // Claude's task list (TaskCreate/TaskUpdate or TodoWrite events) -> { done, total, current, all } or null.
+  // Only the newest session's list counts (ids restart in a new session, e.g. after /clear). A finished
+  // list stays up for TASKS_DONE_TTL_MS after its last change.
+  const TASKS_DONE_TTL_MS = 60000;
+  function tasks(events, now) {
+    let sid;
+    let byId = new Map();
+    let todos = null;
+    let last = 0;
+    for (const e of events) {
+      if (!e || typeof e !== 'object' || typeof e.ts !== 'number' || (e.t !== 'task' && e.t !== 'todos')) continue;
+      if (e.sid !== sid) { sid = e.sid; byId = new Map(); todos = null; }
+      last = e.ts;
+      if (e.t === 'todos' && Array.isArray(e.items)) {
+        todos = e.items;
+      } else if (e.t === 'task' && typeof e.id === 'string') {
+        if (e.status === 'deleted') { byId.delete(e.id); continue; }
+        const cur = byId.get(e.id) || { subject: '', status: 'pending' };
+        byId.set(e.id, { subject: e.subject || cur.subject, status: e.status || cur.status });
+      }
+    }
+    const all = todos || [...byId.values()];
+    if (!all.length) return null;
+    const done = all.filter((x) => x.status === 'completed').length;
+    if (done === all.length && now - last > TASKS_DONE_TTL_MS) return null;
+    const active = all.find((x) => x.status === 'in_progress');
+    return { done, total: all.length, current: active ? active.subject : null, all };
+  }
+
+  const api = { reduce, tasks, DONE_TTL_MS, TASKS_DONE_TTL_MS, SNAPSHOT_KINDS };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WidgetWorkers = api;
 })(this);
