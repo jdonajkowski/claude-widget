@@ -46,7 +46,7 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 
 ## Features
 
-- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle. At the bottom, Glitch the gremlin peeks up over a ledge and acts out what Claude is doing: a thought bubble while it thinks, drumming fingers while a tool or subagent runs, a bubble with an orange ? while a question or permission prompt waits (in any open session), and otherwise it blinks and now and then waves. It ducks if you get close; `showMascot` turns it off
+- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle. At the bottom, Glitch the gremlin peeks up over a ledge and acts out what Claude is doing: a thought bubble while it thinks, drumming fingers while a tool or subagent runs, a bubble with an orange ? while a question or permission prompt waits (in any open session), and otherwise it blinks and now and then waves. After 5 minutes with no typing, clicking or Claude activity, Glitch climbs out and guards the terminal, peeking up over the bottom edge of the window and shuffling along it now and then, until you move the mouse or press a key (`guardMinutes`). It ducks if you get close; `showMascot` turns it off
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
@@ -122,7 +122,8 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `claudeHooks` | `true` | Pass Gremlin's hooks and status line to each session (see below) |
 | `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
 | `showSysmon` | `true` | CPU, temperature, memory, GPU, VRAM and disk in the side panel |
-| `showMascot` | `true` | The Gremlin peeking up at the bottom of the project list |
+| `showMascot` | `true` | Glitch, the gremlin peeking up at the bottom of the project list |
+| `guardMinutes` | `5` | Minutes with no typing, clicking or Claude activity before Glitch climbs out to guard the terminal. `0` turns it off |
 | `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
 | `browserControl` | `true` | Let sessions drive the built-in browser with `gremlin-browser` (takes effect after a restart) |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |

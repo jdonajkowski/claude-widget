@@ -63,6 +63,11 @@ function normalize(form, defaults) {
     else errors.push(`System change guard must be one of ${GUARD_MODES.join(', ')}`);
   }
 
+  if ('guardMinutes' in f) {
+    const n = Number(f.guardMinutes);
+    if (Number.isFinite(n)) values.guardMinutes = clamp(Math.round(n), 0, 240);
+    else errors.push('Guard minutes must be a number');
+  }
   if ('fontSize' in f) {
     const n = Number(f.fontSize);
     if (Number.isFinite(n)) values.fontSize = clamp(Math.round(n), 8, 32);

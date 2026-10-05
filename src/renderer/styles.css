@@ -644,24 +644,36 @@ body:not(.no-mascot):not(.rail-collapsed) #rail-list { padding-bottom: 62px; }
 #mascot.ducking svg { transform: translateY(110%); transition: transform 0.14s ease-in; }
 body.no-mascot #mascot, body.no-mascot #ledge, body.rail-collapsed #mascot, body.rail-collapsed #ledge { display: none; }
 @media (prefers-reduced-motion: reduce) { #mascot svg, #mascot.ducking svg { transition: none; } }
+#mascot.away { visibility: hidden; }
+
+/* Guarding (renderer.js): after guardMinutes idle, Glitch climbs out of the rail and peeks up over the
+   bottom edge of the window below the terminal, glancing side to side. Click-through; any activity sends
+   him back. The rules below the moods (.gremlin) apply to both copies. */
+#guard { position: fixed; z-index: 20; aspect-ratio: 360 / 177; transform-origin: 0 0; pointer-events: none; }
+#guard svg { display: block; width: 100%; height: 100%; overflow: visible; user-select: none; }
+#guard.watching { --lid: -34px; }
+#guard.watching svg { animation: m-look 7s ease-in-out infinite; }
+#guard.ducking svg { transform: translateY(70%); opacity: 0; transition: transform 0.18s ease-in, opacity 0.18s; animation: none; }
+@keyframes m-look { 0%, 20%, 100% { transform: none; } 35%, 45% { transform: translateX(-4%); } 60%, 70% { transform: translateX(4%); } }
+@media (prefers-reduced-motion: reduce) { #guard.watching svg { animation: none; } }
 
 /* Blinking: an eyelid slides down over each eye, clipped below the brows (index.html). --lid is how far
    it is up when open: all the way, or partly while working (a concentrating squint). */
-#mascot { --lid: -50px; }
-#mascot.working { --lid: -26px; }
-#mascot .m-lid { transform: translateY(var(--lid)); fill: #e46856; transition: transform 0.3s; }
-#mascot .m-lash { fill: none; stroke: #3a2420; stroke-width: 4; stroke-linecap: round; }
-#mascot.blink .m-lid { animation: m-blink 0.2s ease-in-out; }
+.gremlin { --lid: -50px; }
+.gremlin.working { --lid: -26px; }
+.gremlin .m-lid { transform: translateY(var(--lid)); fill: #e46856; transition: transform 0.3s; }
+.gremlin .m-lash { fill: none; stroke: #3a2420; stroke-width: 4; stroke-linecap: round; }
+.gremlin.blink .m-lid { animation: m-blink 0.2s ease-in-out; }
 @keyframes m-blink { 0%, 100% { transform: translateY(var(--lid)); } 40%, 60% { transform: translateY(0); } }
 
 /* Hands pivot at their base on the ledge; the face behind the fingers shows when they lift. */
-#mascot .m-skin { fill: #e46856; }
-#mascot .m-hand { transform-box: view-box; }
-#mascot .m-hand-r { transform-origin: 296px 172px; }
-#mascot .m-hand-l { transform-origin: 65px 172px; }
+.gremlin .m-skin { fill: #e46856; }
+.gremlin .m-hand { transform-box: view-box; }
+.gremlin .m-hand-r { transform-origin: 296px 172px; }
+.gremlin .m-hand-l { transform-origin: 65px 172px; }
 
 /* Idle: now and then the right hand lets go of the ledge and waves. */
-#mascot.wave .m-hand-r { animation: m-wave 1.8s ease-in-out; }
+.gremlin.wave .m-hand-r { animation: m-wave 1.8s ease-in-out; }
 @keyframes m-wave {
   0%, 100% { transform: translateY(0) rotate(0); }
   15% { transform: translateY(-28px) rotate(-6deg); }
@@ -673,33 +685,33 @@ body.no-mascot #mascot, body.no-mascot #ledge, body.rail-collapsed #mascot, body
 }
 
 /* Thinking (a turn is running, no tool busy): a thought bubble with three dots pulsing in turn. */
-#mascot .m-think { fill: #e8e6e3; opacity: 0; transform-box: fill-box; transform-origin: 0% 100%; transform: scale(0.6); transition: opacity 0.25s, transform 0.25s; }
-#mascot .m-dot { fill: #1f1e1d; opacity: 0.3; }
-#mascot.thinking .m-think { opacity: 0.92; transform: none; }
-#mascot.thinking .m-dot { animation: m-dot 1.2s ease-in-out infinite; }
-#mascot.thinking .m-dot:nth-of-type(8) { animation-delay: 0.2s; }
-#mascot.thinking .m-dot:nth-of-type(9) { animation-delay: 0.4s; }
+.gremlin .m-think { fill: #e8e6e3; opacity: 0; transform-box: fill-box; transform-origin: 0% 100%; transform: scale(0.6); transition: opacity 0.25s, transform 0.25s; }
+.gremlin .m-dot { fill: #1f1e1d; opacity: 0.3; }
+.gremlin.thinking .m-think { opacity: 0.92; transform: none; }
+.gremlin.thinking .m-dot { animation: m-dot 1.2s ease-in-out infinite; }
+.gremlin.thinking .m-dot:nth-of-type(8) { animation-delay: 0.2s; }
+.gremlin.thinking .m-dot:nth-of-type(9) { animation-delay: 0.4s; }
 @keyframes m-dot { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
 
 /* Working (a tool or subagent is running): drums its fingers on the ledge, outer to inner, hands in turn. */
-#mascot.working .m-finger { animation: m-tap 0.9s ease-in-out infinite; }
-#mascot.working .m-hand-r .m-f2, #mascot.working .m-hand-l .m-f2 { animation-delay: -0.8s; }
-#mascot.working .m-hand-r .m-f1, #mascot.working .m-hand-l .m-f1 { animation-delay: -0.7s; }
-#mascot.working .m-hand-l .m-f3 { animation-delay: -0.45s; }
-#mascot.working .m-hand-l .m-f2 { animation-delay: -0.35s; }
-#mascot.working .m-hand-l .m-f1 { animation-delay: -0.25s; }
+.gremlin.working .m-finger { animation: m-tap 0.9s ease-in-out infinite; }
+.gremlin.working .m-hand-r .m-f2, .gremlin.working .m-hand-l .m-f2 { animation-delay: -0.8s; }
+.gremlin.working .m-hand-r .m-f1, .gremlin.working .m-hand-l .m-f1 { animation-delay: -0.7s; }
+.gremlin.working .m-hand-l .m-f3 { animation-delay: -0.45s; }
+.gremlin.working .m-hand-l .m-f2 { animation-delay: -0.35s; }
+.gremlin.working .m-hand-l .m-f1 { animation-delay: -0.25s; }
 @keyframes m-tap { 0%, 45%, 100% { transform: none; } 15% { transform: translateY(-9px); } }
 
 /* A question or permission prompt is waiting: the bubble again, with an orange ? that pulses, and a wobble
    so it reads differently from thinking at a glance. */
-#mascot .m-q { fill: #d97757; font: 700 50px 'Segoe UI', system-ui, sans-serif; opacity: 0; transform-box: fill-box; transform-origin: 50% 60%; }
-#mascot.question .m-think { opacity: 0.95; transform: none; animation: m-wobble 1.6s ease-in-out infinite; }
-#mascot.question .m-dot { opacity: 0; }
-#mascot.question .m-q { opacity: 1; animation: m-pulse 1.6s ease-in-out infinite; }
+.gremlin .m-q { fill: #d97757; font: 700 50px 'Segoe UI', system-ui, sans-serif; opacity: 0; transform-box: fill-box; transform-origin: 50% 60%; }
+.gremlin.question .m-think { opacity: 0.95; transform: none; animation: m-wobble 1.6s ease-in-out infinite; }
+.gremlin.question .m-dot { opacity: 0; }
+.gremlin.question .m-q { opacity: 1; animation: m-pulse 1.6s ease-in-out infinite; }
 @keyframes m-wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
 @keyframes m-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 
 @media (prefers-reduced-motion: reduce) {
-  #mascot .m-dot, #mascot .m-finger, #mascot .m-think, #mascot .m-q { animation: none !important; }
-  #mascot.thinking .m-dot { opacity: 1; }
+  .gremlin .m-dot, .gremlin .m-finger, .gremlin .m-think, .gremlin .m-q { animation: none !important; }
+  .gremlin.thinking .m-dot { opacity: 1; }
 }

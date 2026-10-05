@@ -53,6 +53,8 @@ const DEFAULT_CONFIG = {
   showSysmon: true,
   // The gremlin peeking up at the bottom of the project list
   showMascot: true,
+  // Minutes with no typing, clicking or Claude activity before Glitch climbs out to guard the terminal. 0: never.
+  guardMinutes: 5,
   // Open the URL a Run-menu dev server prints in the built-in browser.
   autoOpenDevServer: true,
   // widget-browser (bin/): sessions may drive the built-in browser's page (src/browser-control.js)
@@ -1121,16 +1123,22 @@ ipcMain.handle('settings:save', (_e, formValues) => {
   writeJson(statePath, state);
   if (before.hotkey !== config.hotkey && !registerHotkey(config.hotkey)) warnings.push(`Hotkey ${config.hotkey} is taken or invalid`);
   watchSysmon();
-  send('config:changed', { alwaysOnTop: state.alwaysOnTop, showSysmon: config.showSysmon !== false, showMascot: config.showMascot !== false });
+  send('config:changed', { alwaysOnTop: state.alwaysOnTop, ...rendererToggles() });
   return { form: effectiveSettings(), restart, errors: warnings };
 });
+
+// Settings the main window applies live, without a restart.
+function rendererToggles() {
+  const g = Number(config.guardMinutes);
+  return { showSysmon: config.showSysmon !== false, showMascot: config.showMascot !== false, guardMinutes: Number.isFinite(g) && g >= 0 ? g : 5 };
+}
 
 function setConfig(values) {
   const raw = readJson(configPath, {});
   writeJson(configPath, { ...raw, ...values });
   config = loadConfig();
   watchSysmon();
-  send('config:changed', { alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop, showSysmon: config.showSysmon !== false, showMascot: config.showMascot !== false });
+  send('config:changed', { alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop, ...rendererToggles() });
   return { ok: true };
 }
 
@@ -1381,8 +1389,7 @@ ipcMain.handle('config:get', () => ({
   rail: { collapsed: !!state.railCollapsed, width: railWidth() },
   filesOpen: !!state.filesOpen,
   sideCollapsed: !!state.sideCollapsed,
-  showSysmon: config.showSysmon !== false,
-  showMascot: config.showMascot !== false,
+  ...rendererToggles(),
   isWin
 }));
 ipcMain.on('side:setCollapsed', (_e, collapsed) => {

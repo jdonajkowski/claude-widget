@@ -50,3 +50,14 @@ test('ensureImport adds @AGENTS.md once', () => {
   assert.equal(hasImport('@AGENTS.md'), true);
   assert.equal(hasImport('see AGENTS.md'), false);
 });
+
+test('normalize keeps guardMinutes a whole number from 0 to 240', () => {
+  const d = { shell: 'sh', projectsRoot: '/p', cwd: '/', fontFamily: 'mono' };
+  assert.equal(normalize({ guardMinutes: '5' }, d).values.guardMinutes, 5);
+  assert.equal(normalize({ guardMinutes: '2.6' }, d).values.guardMinutes, 3);
+  assert.equal(normalize({ guardMinutes: -4 }, d).values.guardMinutes, 0);
+  assert.equal(normalize({ guardMinutes: 9999 }, d).values.guardMinutes, 240);
+  const bad = normalize({ guardMinutes: 'soon' }, d);
+  assert.equal('guardMinutes' in bad.values, false);
+  assert.match(bad.errors[0], /Guard minutes/);
+});

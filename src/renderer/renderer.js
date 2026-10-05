@@ -46,11 +46,15 @@
   const MS = WidgetMascotState;
   const MOODS = ['question', 'working', 'thinking'];
   let mood = 'idle';
+  // Guarding (below the mascot setup): out of the rail after guardMinutes with nothing happening.
+  let guarding = false;
+  let lastActive = Date.now();
   function renderMascot() {
     const s = activeId ? sess(activeId) : null;
     const question = [...openIds].some((id) => cache.has(id) && cache.get(id).state.attention);
     const agents = s ? WidgetWorkers.reduce(s.workerEvents, Date.now()).filter((w) => w.kind === 'agent' && w.doneAt === null).length : 0;
     const next = MS.mood({ question, turn: !!(s && s.state.working), tools: s ? MS.running(s.tools) : 0, agents });
+    if (next !== 'idle') noteActivity(); // Claude busy or asking: back to the rail, where the moods show
     if (next === mood) return;
     mood = next;
     const el = $('mascot');
@@ -127,16 +131,19 @@
   // It blinks every few seconds (sometimes twice) and now and then waves. Skipped while it can't be seen,
   // and entirely when Windows asks for less animation.
   const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  // Whichever copy is showing: the one on the ledge, or the one out guarding.
   const play = (cls) => {
-    if (still.matches || document.hidden || mascot.offsetParent === null || mascot.classList.contains('ducking')) return;
-    mascot.classList.remove(cls);
-    void mascot.getBoundingClientRect(); // restart the animation if it is already set
-    mascot.classList.add(cls);
+    const el = guarding ? guardBox : mascot;
+    if (still.matches || document.hidden || el.classList.contains('ducking') || (!guarding && mascot.offsetParent === null)) return;
+    el.classList.remove(cls);
+    void el.getBoundingClientRect(); // restart the animation if it is already set
+    el.classList.add(cls);
   };
-  mascot.addEventListener('animationend', (e) => {
-    if (e.animationName === 'm-blink') mascot.classList.remove('blink');
-    if (e.animationName === 'm-wave') mascot.classList.remove('wave');
-  });
+  const endPlay = (e) => {
+    if (e.animationName === 'm-blink') e.currentTarget.classList.remove('blink');
+    if (e.animationName === 'm-wave') e.currentTarget.classList.remove('wave');
+  };
+  mascot.addEventListener('animationend', endPlay);
   const later = (min, max, fn) => setTimeout(fn, min + Math.random() * (max - min));
   const blinkLoop = () => later(2500, 6500, () => {
     play('blink');
@@ -146,6 +153,113 @@
   const waveLoop = () => later(25000, 70000, () => { if (mood === 'idle') play('wave'); waveLoop(); });
   blinkLoop();
   waveLoop();
+
+  // --- Guarding: after guardMinutes with no key, click or mouse movement in Gremlin and nothing from Claude,
+  // Glitch climbs out of the rail and peeks up over the bottom edge of the window below the terminal,
+  // keeping watch and now and then shuffling along it. Any activity sends him straight back to the ledge.
+  // The guarding copy is a second SVG with its own ids (url(#…) references must not point into the rail's).
+  const guardBox = document.createElement('div');
+  guardBox.id = 'guard';
+  guardBox.className = 'gremlin';
+  guardBox.hidden = true;
+  guardBox.innerHTML = mascot.querySelector('svg').outerHTML.replace(/(id="|url\(#|href="#)m-/g, '$1g-');
+  document.body.appendChild(guardBox);
+  guardBox.addEventListener('animationend', endPlay);
+  let guardMs = (cfg.guardMinutes ?? 5) * 60000;
+  let patrolTimer;
+
+  function noteActivity() {
+    lastActive = Date.now();
+    if (guarding) recall();
+  }
+  for (const type of ['keydown', 'mousedown', 'mousemove', 'wheel', 'resize']) window.addEventListener(type, noteActivity, { capture: true, passive: true });
+  setInterval(() => {
+    if (!guarding && guardMs > 0 && mood === 'idle' && !document.hidden && $('modal').hidden && Date.now() - lastActive >= guardMs) deploy();
+  }, 5000);
+
+  function deploy() {
+    if (document.body.classList.contains('no-mascot') || mascot.offsetParent === null) return;
+    const from = mascot.getBoundingClientRect();
+    const host = $('terminal').getBoundingClientRect();
+    if (!from.width || host.width < 260 || host.height < 160) return;
+    guarding = true;
+    const w = Math.round(from.width * 1.25);
+    const h = Math.round((w * 177) / 360);
+    const x = host.right - w - 28;
+    const y = host.bottom - h;
+    Object.assign(guardBox.style, { width: `${w}px`, left: `${x}px`, top: `${y}px` });
+    guardBox.classList.remove('ducking');
+    guardBox.hidden = false;
+    mascot.classList.add('away');
+    if (still.matches) return settle();
+    // Climbs up out of the ledge, then scurries over hand over hand (the drumming fingers), shrinking from
+    // the rail's size to his own.
+    guardBox.classList.add('working');
+    const dx = from.left - x;
+    const dy = from.top - y;
+    const s = from.width / w;
+    const at = (k, up, rot) => `translate(${dx * (1 - k)}px, ${dy * (1 - k) - up}px) scale(${s + (1 - s) * k}) rotate(${rot}deg)`;
+    const frames = [
+      { offset: 0, transform: at(0, 0, 0) },
+      { offset: 0.18, transform: at(0, h * 0.45, 0) },
+      { offset: 0.32, transform: at(0.2, h * 0.3, -5) },
+      { offset: 0.46, transform: at(0.4, h * 0.15, 5) },
+      { offset: 0.6, transform: at(0.6, h * 0.25, -5) },
+      { offset: 0.74, transform: at(0.8, h * 0.1, 5) },
+      { offset: 0.88, transform: at(0.95, h * 0.12, -2) },
+      { offset: 1, transform: 'none' }
+    ];
+    guardBox.animate(frames, { duration: 2600, easing: 'ease-in-out' }).onfinish = settle;
+  }
+
+  function settle() {
+    if (!guarding) return;
+    guardBox.classList.remove('working');
+    guardBox.classList.add('watching');
+    clearTimeout(patrolTimer);
+    patrolTimer = later(12000, 30000, patrol);
+  }
+
+  // Shuffles a stretch along the bottom of the terminal, a hop per step.
+  function patrol() {
+    if (!guarding || still.matches) return;
+    const host = $('terminal').getBoundingClientRect();
+    const w = guardBox.offsetWidth;
+    const minX = host.left + 16;
+    const maxX = host.right - w - 16;
+    const cur = parseFloat(guardBox.style.left);
+    if (maxX - minX < w) return settle();
+    let to = minX + Math.random() * (maxX - minX);
+    if (Math.abs(to - cur) < w * 0.6) to = cur > (minX + maxX) / 2 ? minX + (maxX - minX) * 0.2 : maxX - (maxX - minX) * 0.2;
+    const d = to - cur;
+    const steps = Math.max(2, Math.round(Math.abs(d) / (w * 0.35)));
+    const frames = [];
+    for (let i = 0; i <= steps; i++) {
+      if (i > 0) frames.push({ offset: (i - 0.5) / steps, transform: `translate(${(d * (i - 0.5)) / steps}px, -8px)` });
+      frames.push({ offset: i / steps, transform: `translate(${(d * i) / steps}px, 0)` });
+    }
+    guardBox.classList.replace('watching', 'working');
+    const a = guardBox.animate(frames, { duration: steps * 320 });
+    a.onfinish = () => {
+      guardBox.style.left = `${to}px`;
+      a.cancel();
+      settle();
+    };
+  }
+
+  function recall() {
+    guarding = false;
+    clearTimeout(patrolTimer);
+    for (const a of guardBox.getAnimations()) a.cancel();
+    guardBox.classList.remove('working', 'watching', 'blink', 'wave');
+    guardBox.classList.add('ducking');
+    setTimeout(() => { if (!guarding) guardBox.hidden = true; }, 200);
+    // Back on the ledge: starts ducked and peeks up.
+    mascot.classList.add('ducking');
+    mascot.classList.remove('away');
+    clearTimeout(duckTimer);
+    duckTimer = setTimeout(() => mascot.classList.remove('ducking'), 350);
+  }
 
   // --- Files pane ---------------------------------------------------------
   const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
@@ -784,10 +898,11 @@
     toast(on ? 'Pinned on top' : 'Unpinned');
   };
   $('btn-settings').onclick = () => widget.openConfig();
-  widget.onConfigChanged(({ alwaysOnTop, showSysmon: sm, showMascot }) => {
+  widget.onConfigChanged(({ alwaysOnTop, showSysmon: sm, showMascot, guardMinutes }) => {
     pinBtn.classList.toggle('on', alwaysOnTop);
     if (sm !== undefined) { showSysmon = sm; sysEl.hidden = !sm; updateSide(); }
     if (showMascot !== undefined) document.body.classList.toggle('no-mascot', !showMascot);
+    if (guardMinutes !== undefined) { guardMs = guardMinutes * 60000; noteActivity(); }
   });
 
   // --- Small prompt (worktree branch name, project name) ------------------------
