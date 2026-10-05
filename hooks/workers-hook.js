@@ -1,6 +1,7 @@
-// Claude Code hook that feeds Gremlin's worker rows.
-// Registered for SubagentStart, SubagentStop, Stop, Notification and PostToolUse (Bash|PowerShell, and
-// TodoWrite|TaskCreate|TaskUpdate for the task list progress bar).
+// Claude Code hook that feeds Gremlin's worker rows, task list and mascot.
+// Registered for SubagentStart, SubagentStop, Stop, Notification, and (async, every tool) PreToolUse,
+// PostToolUse and PostToolUseFailure: a background shell's start, the task list progress bar, and
+// tool start/end for the mascot (thinking vs working).
 // Appends JSON lines to the file named by GREMLIN_WORKERS, which only the widget sets.
 // Must never block Claude or print into the session: always exits 0, writes nothing to stdout/stderr.
 const fs = require('fs');
@@ -57,6 +58,11 @@ function taskEvent(p, ts) {
   return null;
 }
 
+// tool_use_id is in all three payloads (checked against Claude Code 2.1.289).
+function toolEvent(p, phase, ts) {
+  return typeof p.tool_use_id === 'string' && p.tool_use_id ? [{ t: 'tool', phase, id: p.tool_use_id, ts }] : [];
+}
+
 function eventsFor(p, ts) {
   switch (p.hook_event_name) {
     case 'SubagentStart':
@@ -70,12 +76,18 @@ function eventsFor(p, ts) {
       const counted = typeof type === 'string' ? ATTENTION_TYPES.includes(type) : ATTENTION_MESSAGE.test(String(p.message || ''));
       return counted ? [{ t: 'attention', reason: clip(type || p.message), ts }] : [];
     }
+    // Every tool call: start and end, paired by tool_use_id (a failed call ends with PostToolUseFailure).
+    case 'PreToolUse':
+      return toolEvent(p, 'start', ts);
+    case 'PostToolUseFailure':
+      return toolEvent(p, 'end', ts);
     case 'PostToolUse': {
+      const done = toolEvent(p, 'end', ts);
       const task = taskEvent(p, ts);
-      if (task) return [task];
-      if (!get(p, ['tool_input', 'run_in_background'])) return [];
+      if (task) return [...done, task];
+      if (!get(p, ['tool_input', 'run_in_background'])) return done;
       const id = TASK_ID_PATHS.map((k) => get(p, k)).find((v) => typeof v === 'string' && v);
-      return id ? [{ t: 'start', id, kind: 'shell', label: clip(get(p, ['tool_input', 'command']) || p.tool_name), ts }] : [];
+      return id ? [...done, { t: 'start', id, kind: 'shell', label: clip(get(p, ['tool_input', 'command']) || p.tool_name), ts }] : done;
     }
     default:
       return [];

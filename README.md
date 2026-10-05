@@ -46,7 +46,7 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 
 ## Features
 
-- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle. At the bottom, the Gremlin peeks up over a ledge (it ducks if you get close; `showMascot` turns it off)
+- **Projects:** a list on the left with one live Claude Code session per project, and a dot showing whether it is working, needs you, finished while you were away, or idle. At the bottom, the Gremlin peeks up over a ledge and acts out what Claude is doing: a thought bubble while it thinks, drumming fingers while a tool or subagent runs, a bubble with an orange ? while a question or permission prompt waits (in any open session), and otherwise it blinks and now and then waves. It ducks if you get close; `showMascot` turns it off
 - **Files pane:** the folder button in the title bar shows a file tree of the active project. Markdown opens in the viewer, HTML and SVG in the built-in browser, other text files in the editor, and the rest in their default app (programs are shown in Explorer instead of run)
 - **Editor:** text files open in Monaco, VS Code's editor component, with syntax highlighting, multi-cursor and find/replace. `Ctrl+S` saves. Changes Claude makes on disk reload live, or show a Reload / Keep my edits bar if you have unsaved edits
 - **Open in VS Code:** in the editor, the Markdown viewer and the files pane's right-click menu
@@ -148,7 +148,7 @@ Worker rows, the "needs you" dot and most of the status footer come from Claude 
 
 The scripts run on Node.js when it's on `PATH`, otherwise on Gremlin's own runtime (`ELECTRON_RUN_AS_NODE`), through bash on Linux or Git Bash, or PowerShell on Windows without Git Bash. If `settings.json` already has Gremlin's hooks or wrapper (the manual setup of older versions), Gremlin uses those and doesn't add its own. Hooks only act inside Gremlin: they check `GREMLIN_WORKERS` and `GREMLIN_STATUS`, which only Gremlin sessions have.
 
-The same hook also follows Claude's task list (TaskCreate / TaskUpdate, or TodoWrite) for the tasks progress bar. If `settings.json` has Gremlin hooks from an older manual setup, Gremlin adds only the matchers missing there.
+The same hook also follows Claude's task list (TaskCreate / TaskUpdate, or TodoWrite) for the tasks progress bar. It also logs the start and end of every tool call (PreToolUse, PostToolUse, PostToolUseFailure, paired by `tool_use_id`) so the Gremlin can tell thinking from working. Those three run in the background (`async`), so Claude never waits for them. If `settings.json` has Gremlin hooks from an older manual setup, Gremlin adds only the events missing there.
 
 Only permission prompts and questions turn the dot to "needs you" (`notification_type` `permission_prompt` / `elicitation_dialog`), not the idle reminder after each turn. Subagent rows finish when the subagent stops. A background shell's row is marked done at the end of the next Claude turn after it exits, since Claude Code has no hook for that. Finished rows fade out after 5 seconds.
 

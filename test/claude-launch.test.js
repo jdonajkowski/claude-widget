@@ -50,10 +50,13 @@ test('sessionSettings adds every hook event and wraps the user status line', () 
     global: { statusLine: { type: 'command', command: 'npx -y ccstatusline@latest', padding: 0 } }
   });
   assert.equal(kind, 'node');
-  assert.deepEqual(Object.keys(settings.hooks), ['SubagentStart', 'SubagentStop', 'Stop', 'Notification', 'PostToolUse', 'PreToolUse']);
-  assert.equal(settings.hooks.PostToolUse[0].matcher, 'Bash|PowerShell');
-  assert.deepEqual(settings.hooks.PostToolUse[0].hooks.map((h) => h.command), ['node "C:/App/resources/app/hooks/workers-hook.js"', 'node "C:/App/resources/app/hooks/guard-hook.js"']);
-  assert.deepEqual(settings.hooks.PreToolUse, [{ matcher: 'Bash|PowerShell', hooks: [{ type: 'command', command: 'node "C:/App/resources/app/hooks/guard-hook.js"' }] }]);
+  assert.deepEqual(Object.keys(settings.hooks), ['SubagentStart', 'SubagentStop', 'Stop', 'Notification', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure']);
+  const workersBg = { type: 'command', command: 'node "C:/App/resources/app/hooks/workers-hook.js"', async: true };
+  const guard = { type: 'command', command: 'node "C:/App/resources/app/hooks/guard-hook.js"' };
+  assert.deepEqual(settings.hooks.PreToolUse, [{ hooks: [workersBg] }, { matcher: 'Bash|PowerShell', hooks: [guard] }]);
+  assert.deepEqual(settings.hooks.PostToolUse, [{ hooks: [workersBg] }, { matcher: 'Bash|PowerShell', hooks: [guard] }]);
+  assert.deepEqual(settings.hooks.PostToolUseFailure, [{ hooks: [workersBg] }]);
+  assert.deepEqual(settings.hooks.Stop, [{ hooks: [{ type: 'command', command: 'node "C:/App/resources/app/hooks/workers-hook.js"' }] }]);
   assert.equal(settings.statusLine.command, 'node "C:/App/resources/app/hooks/statusline-tee.js" npx -y ccstatusline@latest');
   assert.equal(settings.statusLine.padding, 0);
 });
@@ -61,8 +64,7 @@ test('sessionSettings adds every hook event and wraps the user status line', () 
 test('sessionSettings leaves out what global settings already wire up', () => {
   const w = { type: 'command', command: 'node "C:/x/hooks/workers-hook.js"' };
   const everyHook = {
-    ...Object.fromEntries(['SubagentStart', 'SubagentStop', 'Stop', 'Notification'].map((e) => [e, [{ hooks: [w] }]])),
-    PostToolUse: ['Bash|PowerShell', 'TodoWrite|TaskCreate|TaskUpdate'].map((matcher) => ({ matcher, hooks: [w] }))
+    ...Object.fromEntries(['SubagentStart', 'SubagentStop', 'Stop', 'Notification', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure'].map((e) => [e, [{ hooks: [w] }]]))
   };
   const global = {
     hooks: everyHook,
@@ -72,7 +74,7 @@ test('sessionSettings leaves out what global settings already wire up', () => {
   assert.deepEqual(Object.keys(sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global: { ...global, hooks: everyHook } }).settings.hooks), ['PreToolUse', 'PostToolUse']);
 });
 
-test('sessionSettings adds hook matchers an older global setup lacks', () => {
+test('sessionSettings adds the tool hooks an older global setup lacks', () => {
   const w = { type: 'command', command: 'node "C:/x/hooks/workers-hook.js"' };
   const global = {
     hooks: Object.fromEntries(['SubagentStart', 'SubagentStop', 'Stop', 'Notification'].map((e) => [e, [{ hooks: [w] }]])),
@@ -80,13 +82,21 @@ test('sessionSettings adds hook matchers an older global setup lacks', () => {
   };
   global.hooks.PostToolUse = [{ matcher: 'Bash|PowerShell', hooks: [w] }];
   const { settings } = sessionSettings({ hooksDir, execPath, node: 'node', isWin: true, global, guard: false });
-  assert.deepEqual(settings.hooks, { PostToolUse: [{ matcher: 'TodoWrite|TaskCreate|TaskUpdate', hooks: [{ type: 'command', command: 'node "C:/App/resources/app/hooks/workers-hook.js"' }] }] });
+  const bg = [{ hooks: [{ type: 'command', command: 'node "C:/App/resources/app/hooks/workers-hook.js"', async: true }] }];
+  assert.deepEqual(settings.hooks, { PreToolUse: bg, PostToolUse: bg, PostToolUseFailure: bg });
 });
 
 test('the guard hook runs in the foreground, the others in the background, under PowerShell', () => {
   const { settings } = sessionSettings({ hooksDir, execPath, node: null, isWin: true, gitBash: null });
-  assert.equal(settings.hooks.PreToolUse[0].hooks[0].async, undefined);
+  assert.equal(settings.hooks.PreToolUse.find((e) => e.matcher === 'Bash|PowerShell').hooks[0].async, undefined);
   assert.equal(settings.hooks.Stop[0].hooks[0].async, true);
+  assert.equal(settings.hooks.PreToolUse[0].hooks[0].async, true);
+});
+
+test('the tool hooks run in the background under bash too', () => {
+  const { settings } = sessionSettings({ hooksDir, execPath, node: null, isWin: false, guard: false });
+  assert.equal(settings.hooks.PostToolUse[0].hooks[0].async, true);
+  assert.equal(settings.hooks.Stop[0].hooks[0].async, undefined);
 });
 
 test('isClaudeCommand only matches Claude Code', () => {

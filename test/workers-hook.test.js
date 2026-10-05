@@ -120,3 +120,17 @@ test('task tools become task events', () => {
   assert.deepEqual(toEvents({ ...base, tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'Fix it', activeForm: 'Fixing it', status: 'in_progress' }, { content: 'Test', status: 'pending' }] } }, 7),
     [{ t: 'todos', items: [{ subject: 'Fixing it', status: 'in_progress' }, { subject: 'Test', status: 'pending' }], ts: 7, sid: 's' }]);
 });
+
+test('every tool call logs start and end by tool_use_id, also when it fails', () => {
+  assert.deepEqual(toEvents({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_use_id: 'toolu_1', tool_input: {} }, 5), [{ t: 'tool', phase: 'start', id: 'toolu_1', ts: 5 }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'PostToolUse', tool_name: 'Read', tool_use_id: 'toolu_1', tool_input: {}, tool_response: {} }, 6), [{ t: 'tool', phase: 'end', id: 'toolu_1', ts: 6 }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'PostToolUseFailure', tool_name: 'Read', tool_use_id: 'toolu_2', error: 'x' }, 7), [{ t: 'tool', phase: 'end', id: 'toolu_2', ts: 7 }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'PreToolUse', tool_name: 'Read' }, 5), []);
+});
+
+test('PostToolUse logs the tool end before a background shell start or task change', () => {
+  const shell = toEvents({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_3', tool_input: { command: 'npm run dev', run_in_background: true }, tool_response: { backgroundTaskId: 'b1' } }, 8);
+  assert.deepEqual(shell.map((e) => e.t), ['tool', 'start']);
+  const task = toEvents({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_use_id: 'toolu_4', tool_input: { taskId: '1', status: 'completed' } }, 9);
+  assert.deepEqual(task.map((e) => e.t), ['tool', 'task']);
+});

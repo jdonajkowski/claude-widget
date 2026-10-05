@@ -29,7 +29,52 @@
         <div id="rail-head"><span class="title">Projects</span><button id="rail-add" title="Add folder / show hidden">+</button></div>
         <div id="rail-list"></div>
         <div id="ledge"></div>
-        <div id="mascot" title="Gremlin"><img src="../../assets/peek.png" alt="" draggable="false"></div>
+        <div id="mascot" title="Gremlin">
+          <!-- peek.png in its own pixel coordinates, with eyelids, a thought bubble and fingers that move (renderer.js). -->
+          <svg viewBox="0 0 360 177" aria-hidden="true">
+            <defs>
+              <clipPath id="m-below-brow-l"><polygon points="98,97 118,99 128,106 140,113 155,118 166,120 166,150 98,150"/></clipPath>
+              <clipPath id="m-below-brow-r"><polygon points="263,97 243,99 233,106 221,113 206,118 195,120 195,150 263,150"/></clipPath>
+              <clipPath id="m-eye-l" clip-path="url(#m-below-brow-l)"><ellipse cx="134" cy="120" rx="26.5" ry="23.5"/></clipPath>
+              <clipPath id="m-eye-r" clip-path="url(#m-below-brow-r)"><ellipse cx="227" cy="120" rx="26.5" ry="23.5"/></clipPath>
+              <!-- One clip per finger, inner to outer; the left hand mirrors the right. -->
+              <clipPath id="m-fr1"><rect x="261" y="127" width="25" height="44" rx="9"/></clipPath>
+              <clipPath id="m-fr2"><rect x="282" y="122" width="29" height="55" rx="9"/></clipPath>
+              <clipPath id="m-fr3"><rect x="307" y="129" width="24" height="42" rx="9"/></clipPath>
+              <clipPath id="m-fl1"><rect x="75" y="127" width="25" height="44" rx="9"/></clipPath>
+              <clipPath id="m-fl2"><rect x="50" y="122" width="29" height="55" rx="9"/></clipPath>
+              <clipPath id="m-fl3"><rect x="30" y="129" width="24" height="42" rx="9"/></clipPath>
+              <!-- The base picture without its fingers: the finger layers draw them. -->
+              <mask id="m-no-hands">
+                <rect width="360" height="177" fill="#fff"/>
+                <rect x="259" y="125" width="29" height="48" rx="7"/><rect x="280" y="120" width="33" height="57"/><rect x="305" y="127" width="28" height="46" rx="7"/>
+                <rect x="73" y="125" width="29" height="48" rx="7"/><rect x="48" y="120" width="33" height="57"/><rect x="28" y="127" width="28" height="46" rx="7"/>
+              </mask>
+              <image id="m-art" href="../../assets/peek.png" width="360" height="177"/>
+            </defs>
+            <use href="#m-art" mask="url(#m-no-hands)"/>
+            <g clip-path="url(#m-eye-l)"><g class="m-lid"><path d="M104,60 H164 V138 Q134,150 104,138 Z"/><path class="m-lash" d="M108,138 Q134,148 160,138"/></g></g>
+            <g clip-path="url(#m-eye-r)"><g class="m-lid"><path d="M197,60 H257 V138 Q227,150 197,138 Z"/><path class="m-lash" d="M201,138 Q227,148 253,138"/></g></g>
+            <!-- Face behind the fingers, shown when they lift. -->
+            <path class="m-skin" d="M257,119 H291 Q293,136 286,146 H257 Z M104,119 H70 Q68,136 75,146 H104 Z"/>
+            <g class="m-hand m-hand-l">
+              <g class="m-finger m-f1"><use href="#m-art" clip-path="url(#m-fl1)"/></g>
+              <g class="m-finger m-f2"><use href="#m-art" clip-path="url(#m-fl2)"/></g>
+              <g class="m-finger m-f3"><use href="#m-art" clip-path="url(#m-fl3)"/></g>
+            </g>
+            <g class="m-hand m-hand-r">
+              <g class="m-finger m-f1"><use href="#m-art" clip-path="url(#m-fr1)"/></g>
+              <g class="m-finger m-f2"><use href="#m-art" clip-path="url(#m-fr2)"/></g>
+              <g class="m-finger m-f3"><use href="#m-art" clip-path="url(#m-fr3)"/></g>
+            </g>
+            <g class="m-think">
+              <circle cx="232" cy="30" r="6"/><circle cx="246" cy="10" r="9"/>
+              <circle cx="266" cy="-22" r="22"/><circle cx="294" cy="-38" r="26"/><circle cx="322" cy="-22" r="22"/><circle cx="294" cy="-10" r="22"/>
+              <circle class="m-dot" cx="274" cy="-22" r="6"/><circle class="m-dot" cx="294" cy="-22" r="6"/><circle class="m-dot" cx="314" cy="-22" r="6"/>
+              <text class="m-q" x="294" y="-6" text-anchor="middle">?</text>
+            </g>
+          </svg>
+        </div>
       </nav>
       <aside id="files" hidden>
         <div id="files-head"><span class="title">Files</span><button id="files-refresh" title="Refresh">↻</button></div>
@@ -96,6 +141,7 @@
   <script src="../footer.js"></script>
   <script src="../md-links.js"></script>
   <script src="../session-state.js"></script>
+  <script src="../mascot-state.js"></script>
   <script src="../zones.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>

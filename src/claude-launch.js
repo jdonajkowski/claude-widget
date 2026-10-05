@@ -5,13 +5,16 @@
 const fs = require('fs');
 const path = require('path');
 
+// [event, matcher, async]. The tool events fire for every tool call, so they run in the background:
+// Claude never waits for them. Their order in the log can shuffle; the renderer pairs them by tool_use_id.
 const HOOK_EVENTS = [
   ['SubagentStart'],
   ['SubagentStop'],
   ['Stop'],
   ['Notification'],
-  ['PostToolUse', 'Bash|PowerShell'],
-  ['PostToolUse', 'TodoWrite|TaskCreate|TaskUpdate']
+  ['PreToolUse', '', true],
+  ['PostToolUse', '', true],
+  ['PostToolUseFailure', '', true]
 ];
 
 // First match of any of names in the PATH directories, or null.
@@ -53,10 +56,11 @@ function unwrapStatus(command) {
 //   node: Node is on PATH; `node "<script>"` reads the same in bash, PowerShell and cmd
 //   else: the widget's executable as Node, through bash (Linux, Windows with Git Bash) or PowerShell.
 function runtime({ node, execPath, isWin, gitBash }) {
+  const bg = (async) => (async ? { async: true } : {});
   if (node) {
     return {
       kind: 'node',
-      hook: (script) => ({ type: 'command', command: `node "${fwd(script)}"` }),
+      hook: (script, { async = false } = {}) => ({ type: 'command', command: `node "${fwd(script)}"`, ...bg(async) }),
       status: (tee, user) => `node "${fwd(tee)}"${user ? ` ${user}` : ''}`
     };
   }
@@ -64,7 +68,7 @@ function runtime({ node, execPath, isWin, gitBash }) {
     const run = (script, rest = '') => `ELECTRON_RUN_AS_NODE=1 ${sq(fwd(execPath))} ${sq(fwd(script))}${rest}`;
     return {
       kind: 'built-in',
-      hook: (script) => ({ type: 'command', command: run(script), ...(isWin ? { shell: 'bash' } : {}) }),
+      hook: (script, { async = false } = {}) => ({ type: 'command', command: run(script), ...(isWin ? { shell: 'bash' } : {}), ...bg(async) }),
       status: (tee, user) => run(tee, user ? ` ${user}` : '')
     };
   }
@@ -100,8 +104,10 @@ function sessionSettings({ hooksDir, execPath, node, isWin, gitBash, global = {}
     if (entry) entry.hooks.push(hook);
     else list.push({ ...(matcher ? { matcher } : {}), hooks: [hook] });
   };
-  const hook = rt.hook(path.join(hooksDir, 'workers-hook.js'));
-  for (const [event, matcher] of HOOK_EVENTS) if (!wired(global, event, matcher, 'workers-hook.js')) add(event, matcher, hook);
+  const workers = path.join(hooksDir, 'workers-hook.js');
+  for (const [event, matcher, async] of HOOK_EVENTS) {
+    if (!wired(global, event, matcher, 'workers-hook.js')) add(event, matcher, rt.hook(workers, { async: !!async }));
+  }
   if (guard && !mentions(global.hooks, 'guard-hook.js')) {
     const script = path.join(hooksDir, 'guard-hook.js');
     add('PreToolUse', 'Bash|PowerShell', rt.hook(script, { sync: true }));

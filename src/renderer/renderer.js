@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -23,7 +23,7 @@
   const cache = new Map();
   const sess = (id) => {
     if (!cache.has(id)) {
-      cache.set(id, { state: SS.initial(), workerEvents: [], status: null, git: null, progress: { state: 0, value: 0 }, turnStart: null, lastTurnMs: null });
+      cache.set(id, { state: SS.initial(), workerEvents: [], tools: new Map(), status: null, git: null, progress: { state: 0, value: 0 }, turnStart: null, lastTurnMs: null });
     }
     return cache.get(id);
   };
@@ -37,7 +37,26 @@
     const s = sess(id);
     s.state = SS.apply(s.state, ev, id === activeId);
     renderRail();
+    renderMascot();
   };
+
+  // What the Gremlin acts out follows Claude (mascot-state.js): a ? bubble while any open session has a
+  // question waiting, else the shown session's turn: drumming fingers while a tool or subagent runs,
+  // a thought bubble in between. Idle, it just blinks and now and then waves.
+  const MS = WidgetMascotState;
+  const MOODS = ['question', 'working', 'thinking'];
+  let mood = 'idle';
+  function renderMascot() {
+    const s = activeId ? sess(activeId) : null;
+    const question = [...openIds].some((id) => cache.has(id) && cache.get(id).state.attention);
+    const agents = s ? WidgetWorkers.reduce(s.workerEvents, Date.now()).filter((w) => w.kind === 'agent' && w.doneAt === null).length : 0;
+    const next = MS.mood({ question, turn: !!(s && s.state.working), tools: s ? MS.running(s.tools) : 0, agents });
+    if (next === mood) return;
+    mood = next;
+    const el = $('mascot');
+    for (const m of MOODS) el.classList.toggle(m, m === next);
+    if (next !== 'idle') el.classList.remove('wave');
+  }
 
   // --- Terminals ----------------------------------------------------------
   const terminals = WidgetTerminals.createTerminals({
@@ -51,6 +70,8 @@
       if (isAux(id)) return;
       const s = sess(id);
       s.progress = { state, value };
+      // A new turn: forget tool calls a previous one left without an end (e.g. interrupted).
+      if (state >= 1 && state <= 4 && s.turnStart === null) s.tools = new Map();
       const ended = state === 0 && s.turnStart !== null;
       trackTurn(s, state);
       update(id, { t: 'progress', state });
@@ -103,6 +124,29 @@
     duckTimer = setTimeout(() => mascot.classList.remove('ducking'), 1600);
   });
 
+  // It blinks every few seconds (sometimes twice) and now and then waves. Skipped while it can't be seen,
+  // and entirely when Windows asks for less animation.
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const play = (cls) => {
+    if (still.matches || document.hidden || mascot.offsetParent === null || mascot.classList.contains('ducking')) return;
+    mascot.classList.remove(cls);
+    void mascot.getBoundingClientRect(); // restart the animation if it is already set
+    mascot.classList.add(cls);
+  };
+  mascot.addEventListener('animationend', (e) => {
+    if (e.animationName === 'm-blink') mascot.classList.remove('blink');
+    if (e.animationName === 'm-wave') mascot.classList.remove('wave');
+  });
+  const later = (min, max, fn) => setTimeout(fn, min + Math.random() * (max - min));
+  const blinkLoop = () => later(2500, 6500, () => {
+    play('blink');
+    if (Math.random() < 0.2) later(300, 360, () => play('blink'));
+    blinkLoop();
+  });
+  const waveLoop = () => later(25000, 70000, () => { if (mood === 'idle') play('wave'); waveLoop(); });
+  blinkLoop();
+  waveLoop();
+
   // --- Files pane ---------------------------------------------------------
   const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
   $('btn-files').onclick = () => { filesPane.toggle(); terminals.focus(); };
@@ -120,6 +164,7 @@
     openIds = new Set(open);
     renderRail();
     renderTitle(); // the active project may have been renamed
+    renderMascot();
   });
   widget.projects.onSelect(({ id }) => activate(id));
   widget.projects.onClosed(({ id }) => {
@@ -128,6 +173,7 @@
     openIds.delete(id);
     renderRail();
     renderTaskbar();
+    renderMascot();
     if (id === activeId) {
       showPlaceholder('Session closed. Press Enter or click the project to start it again.');
       renderActive();
@@ -374,6 +420,7 @@
     renderJobs();
     renderFooter();
     renderRail();
+    renderMascot();
   }
 
   // --- OSC 9;4 progress: strip shows the active session, taskbar is busy while any session works ---
@@ -644,10 +691,14 @@
 
   widget.workers.onEvents(({ id, events }) => {
     const s = sess(id);
-    s.workerEvents = s.workerEvents.concat(events);
+    // Tool start/end only feed the mascot; kept out of workerEvents, which keeps everything for the rows.
+    const tools = events.filter((e) => e && e.t === 'tool');
+    if (tools.length) s.tools = tools.reduce(MS.applyTool, s.tools);
+    s.workerEvents = s.workerEvents.concat(tools.length ? events.filter((e) => !e || e.t !== 'tool') : events);
     // Permission prompts and questions (hooks/workers-hook.js) turn the row's dot to "needs you".
     if (events.some((e) => e && e.t === 'attention')) update(id, { t: 'attention' });
     if (id === activeId) { renderWorkers(); renderJobs(); }
+    renderMascot();
   });
 
   // Elapsed times in the worker rows and the turn timer tick once a second.
