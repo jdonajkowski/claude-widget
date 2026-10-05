@@ -26,7 +26,25 @@ contextBridge.exposeInMainWorld('widget', {
     addMenu: () => ipcRenderer.send('projects:addMenu'),
     onList: on('projects:list'),
     onClosed: on('session:closed'),
-    onSelect: on('projects:select')
+    onSelect: on('projects:select'),
+    onWorktreeAsk: on('worktree:ask'),
+    createWorktree: (id, branch) => ipcRenderer.invoke('worktree:create', { id, branch })
+  },
+  aux: {
+    get: () => ipcRenderer.invoke('aux:get'),
+    close: (id) => ipcRenderer.send('session:close', { id }),
+    onList: on('aux:list'),
+    onSelect: on('aux:select')
+  },
+  menus: {
+    run: () => ipcRenderer.send('run:menu'),
+    admin: () => ipcRenderer.send('admin:menu')
+  },
+  workbench: {
+    open: (tab) => ipcRenderer.send('workbench:open', tab)
+  },
+  sys: {
+    onSample: on('sys:sample')
   },
   side: {
     setCollapsed: (collapsed) => ipcRenderer.send('side:setCollapsed', collapsed)
@@ -65,7 +83,10 @@ contextBridge.exposeInMainWorld('widget', {
     setOpen: (open) => ipcRenderer.send('files:setOpen', open),
     list: (id, rel) => ipcRenderer.invoke('files:list', { id, rel }),
     open: (id, rel) => ipcRenderer.send('files:open', { id, rel }),
-    menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir })
+    menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir }),
+    search: (id, query, opts) => ipcRenderer.invoke('files:search', { id, query, ...opts }),
+    git: (id) => ipcRenderer.invoke('files:git', { id }),
+    openAt: (id, rel, line) => ipcRenderer.send('files:openAt', { id, rel, line })
   },
   browser: {
     open: () => ipcRenderer.send('browser:open')

@@ -11,7 +11,7 @@
 <body>
   <div id="frame">
     <header id="bar">
-      <div id="title"><button id="btn-rail" title="Toggle project list (Ctrl+Shift+B)">☰</button><button id="btn-files" title="Toggle files (Ctrl+Shift+E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5a1 1 0 0 1 1-1h3.1l1.5 1.6H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg></button><button id="btn-browser" class="icon-btn" title="Browser"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M2.2 8h11.6M8 2.2c1.7 1.6 2.5 3.5 2.5 5.8S9.7 12.2 8 13.8M8 2.2C6.3 3.8 5.5 5.7 5.5 8s.8 4.2 2.5 5.8"/></svg></button><span class="dot"></span><span id="title-text">Claude Code</span></div>
+      <div id="title"><button id="btn-rail" title="Toggle project list (Ctrl+Shift+B)">☰</button><button id="btn-files" title="Toggle files (Ctrl+Shift+E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5a1 1 0 0 1 1-1h3.1l1.5 1.6H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg></button><button id="btn-browser" class="icon-btn" title="Browser"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.8"/><path d="M2.2 8h11.6M8 2.2c1.7 1.6 2.5 3.5 2.5 5.8S9.7 12.2 8 13.8M8 2.2C6.3 3.8 5.5 5.7 5.5 8s.8 4.2 2.5 5.8"/></svg></button><button id="btn-run" class="icon-btn" title="Run a task or open a terminal"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.6 8z"/></svg></button><button id="btn-admin" class="icon-btn" title="Admin terminal, system changes, snapshots"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13 3.6v4.1c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.6z"/><path d="M8 5.2v3.6M8 10.6v.3"/></svg></button><button id="btn-workbench" class="icon-btn" title="Workbench: git, system, logs, usage, new project (Ctrl+Shift+G)"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.3" y="2.3" width="4.6" height="4.6" rx="1"/><rect x="9.1" y="2.3" width="4.6" height="4.6" rx="1"/><rect x="2.3" y="9.1" width="4.6" height="4.6" rx="1"/><rect x="9.1" y="9.1" width="4.6" height="4.6" rx="1"/></svg></button><span class="dot"></span><span id="title-text">Claude Code</span></div>
       <div id="controls">
         <button id="btn-restart" title="Restart session (Ctrl+Shift+R)">↻</button>
         <button id="btn-fade" title="More transparent">−</button>
@@ -31,13 +31,22 @@
       </nav>
       <aside id="files" hidden>
         <div id="files-head"><span class="title">Files</span><button id="files-refresh" title="Refresh">↻</button></div>
+        <div id="files-search"><input id="files-q" placeholder="Search (Ctrl+Shift+F)" spellcheck="false"><button id="files-regex" title="Regular expression">.*</button><button id="files-case" title="Match case">Aa</button></div>
         <div id="files-list"></div>
       </aside>
-      <main id="terminal"><div id="placeholder" hidden></div></main>
+      <main id="center">
+        <div id="tabs" hidden></div>
+        <div id="terminal"><div id="placeholder" hidden></div></div>
+      </main>
       <aside id="side" hidden>
         <div id="side-mini" title="Show panel (Ctrl+Shift+W)"><span class="chev">‹</span><span id="mini-count" class="idle"></span><span id="mini-turn"></span></div>
         <div id="workers-head"><span class="title">Workers</span><span id="workers-count" class="idle">idle</span><button id="side-toggle" title="Collapse panel (Ctrl+Shift+W)">›</button></div>
         <div id="workers"></div>
+        <div id="sysmon" hidden>
+          <div class="f-row"><span class="s-label">cpu</span><span class="meter"><i id="s-cpu"></i></span><span id="s-cpu-t" class="right"></span></div>
+          <div class="f-row"><span class="s-label">mem</span><span class="meter"><i id="s-mem"></i></span><span id="s-mem-t" class="right"></span></div>
+          <div class="f-row" id="s-gpu-row" hidden><span class="s-label">gpu</span><span class="meter"><i id="s-gpu"></i></span><span id="s-gpu-t" class="right"></span></div>
+        </div>
         <div id="footer" hidden>
           <div class="f-row"><span id="f-model"></span><span id="f-cost" class="right"></span></div>
           <div class="f-row" id="f-ctx-row"><span>ctx</span><span class="meter"><i id="f-meter"></i></span><span id="f-ctx" class="right"></span></div>
@@ -47,6 +56,15 @@
       </aside>
     </div>
     <div id="toast"></div>
+    <div id="modal" hidden>
+      <form id="modal-form">
+        <div id="modal-title"></div>
+        <div id="modal-text"></div>
+        <input id="modal-input" spellcheck="false" autocomplete="off">
+        <div id="modal-error"></div>
+        <div class="modal-buttons"><button type="button" id="modal-cancel">Cancel</button><button type="submit" id="modal-ok">OK</button></div>
+      </form>
+    </div>
   </div>
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>

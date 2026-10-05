@@ -71,7 +71,8 @@ function runtime({ node, execPath, isWin, gitBash }) {
   const ps = (script, rest = '') => `$env:ELECTRON_RUN_AS_NODE='1'; & ${psq(execPath)} ${psq(script)}${rest}`;
   return {
     kind: 'built-in',
-    hook: (script) => ({ type: 'command', shell: 'powershell', async: true, command: ps(script) }),
+    // The guard hook (sync) must finish first: its answer decides whether Claude asks before a command.
+    hook: (script, { sync = false } = {}) => ({ type: 'command', shell: 'powershell', ...(sync ? {} : { async: true }), command: ps(script) }),
     // Encoded, so it reaches PowerShell intact whichever shell (cmd, PowerShell, bash) runs the status line.
     // Piping the output makes PowerShell wait for the (GUI-type) widget executable and pass its output on.
     status: (tee, user) => {
@@ -84,13 +85,25 @@ function runtime({ node, execPath, isWin, gitBash }) {
 const mentions = (obj, needle) => JSON.stringify(obj || {}).includes(needle);
 
 // Settings for --settings, or null when ~/.claude/settings.json already wires up both (older setup).
-function sessionSettings({ hooksDir, execPath, node, isWin, gitBash, global = {} }) {
+// guard: also add hooks/guard-hook.js (system change safety net) before and after Bash/PowerShell commands.
+function sessionSettings({ hooksDir, execPath, node, isWin, gitBash, global = {}, guard = true }) {
   const rt = runtime({ node, execPath, isWin, gitBash });
   const out = {};
+  const add = (event, matcher, hook) => {
+    out.hooks = out.hooks || {};
+    const list = out.hooks[event] = out.hooks[event] || [];
+    const entry = list.find((e) => e.matcher === matcher);
+    if (entry) entry.hooks.push(hook);
+    else list.push({ ...(matcher ? { matcher } : {}), hooks: [hook] });
+  };
   if (!mentions(global.hooks, 'workers-hook.js')) {
     const hook = rt.hook(path.join(hooksDir, 'workers-hook.js'));
-    out.hooks = {};
-    for (const [event, matcher] of HOOK_EVENTS) out.hooks[event] = [{ ...(matcher ? { matcher } : {}), hooks: [hook] }];
+    for (const [event, matcher] of HOOK_EVENTS) add(event, matcher, hook);
+  }
+  if (guard && !mentions(global.hooks, 'guard-hook.js')) {
+    const script = path.join(hooksDir, 'guard-hook.js');
+    add('PreToolUse', 'Bash|PowerShell', rt.hook(script, { sync: true }));
+    add('PostToolUse', 'Bash|PowerShell', rt.hook(script));
   }
   const userStatus = global.statusLine && global.statusLine.command;
   if (!mentions(global.statusLine, 'statusline-tee.js')) {

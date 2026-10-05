@@ -30,6 +30,12 @@
         <span class="row"><input name="claudeConfigDir" placeholder="~/.claude"><button type="button" data-browse="claudeConfigDir">Browse…</button></span></label>
       <label>Environment variables<span class="hint">One <code>NAME=value</code> per line, added to every session</span><textarea name="env" rows="4" spellcheck="false"></textarea></label>
 
+      <h2>System and tools</h2>
+      <label>Before system changes<span class="hint">Registry, services, boot, power, packages, kernel settings, files under /etc or C:\Windows. Undo steps are kept in Workbench → Changes. New sessions pick this up</span>
+        <select name="guardMode"><option value="ask">Claude asks first (recommended)</option><option value="log">Only log them, with their undo</option><option value="off">Off</option></select></label>
+      <label class="check"><input type="checkbox" name="showSysmon"> Show CPU, memory and GPU in the side panel</label>
+      <label class="check"><input type="checkbox" name="autoOpenDevServer"> Open dev servers started from the Run menu in the built-in browser</label>
+
       <h2>Window</h2>
       <label>Show / hide hotkey<span class="hint">Electron accelerator, e.g. <code>Control+Alt+Space</code>. Empty turns it off</span><input name="hotkey"></label>
       <label class="check"><input type="checkbox" name="alwaysOnTop"> Keep on top of other windows</label>

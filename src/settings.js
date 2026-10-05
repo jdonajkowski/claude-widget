@@ -2,6 +2,8 @@
 // ~/.claude/CLAUDE.md importing the global AGENTS.md. Pure, so tests can call them directly.
 
 const MATERIALS = ['none', 'acrylic', 'mica', 'tabbed'];
+// System change guard (hooks/guard-hook.js): ask before running, only log, or off.
+const GUARD_MODES = ['ask', 'log', 'off'];
 const COLOR_KEYS = ['background', 'foreground', 'cursor', 'selectionBackground'];
 const COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -52,6 +54,12 @@ function normalize(form, defaults) {
   if ('showInTaskbar' in f) values.showInTaskbar = !!f.showInTaskbar;
   if ('claudeHooks' in f) values.claudeHooks = !!f.claudeHooks;
   if ('fontFamily' in f) values.fontFamily = str(f.fontFamily) || defaults.fontFamily;
+  if ('showSysmon' in f) values.showSysmon = !!f.showSysmon;
+  if ('autoOpenDevServer' in f) values.autoOpenDevServer = !!f.autoOpenDevServer;
+  if ('guardMode' in f) {
+    if (GUARD_MODES.includes(f.guardMode)) values.guardMode = f.guardMode;
+    else errors.push(`System change guard must be one of ${GUARD_MODES.join(', ')}`);
+  }
 
   if ('fontSize' in f) {
     const n = Number(f.fontSize);
@@ -96,4 +104,4 @@ function ensureImport(claudeMd) {
 
 const hasImport = (claudeMd) => ensureImport(claudeMd) === null;
 
-module.exports = { MATERIALS, splitArgs, joinArgs, parseEnv, formatEnv, normalize, toForm, ensureImport, hasImport };
+module.exports = { MATERIALS, GUARD_MODES, splitArgs, joinArgs, parseEnv, formatEnv, normalize, toForm, ensureImport, hasImport };

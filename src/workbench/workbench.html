@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; worker-src 'self' blob:">
+  <title>Workbench</title>
+  <link rel="stylesheet" href="../../node_modules/monaco-editor/min/vs/editor/editor.main.css">
+  <link rel="stylesheet" href="workbench.css">
+</head>
+<body>
+  <nav id="nav">
+    <div class="group">Code</div>
+    <button data-tab="git" class="on">Git</button>
+    <button data-tab="new">New project</button>
+    <button data-tab="usage">Usage</button>
+    <div class="group">System</div>
+    <button data-tab="system">Monitor &amp; snapshots</button>
+    <button data-tab="changes">Changes &amp; undo</button>
+    <button data-tab="logs">Logs</button>
+    <div id="nav-project"></div>
+  </nav>
+
+  <!-- Git -->
+  <section data-tab="git" class="on" id="git">
+    <header class="bar">
+      <span id="git-branch" class="chip"></span>
+      <span id="git-sync" class="muted"></span>
+      <span class="grow"></span>
+      <button id="git-refresh" title="Refresh (F5)">Refresh</button>
+      <button id="git-pull">Pull</button>
+      <button id="git-push">Push</button>
+    </header>
+    <div id="git-body">
+      <div id="git-left">
+        <div id="git-files"></div>
+        <div id="git-commit">
+          <textarea id="git-msg" rows="4" placeholder="Commit message (Ctrl+Enter commits)" spellcheck="true"></textarea>
+          <div class="row">
+            <button id="git-suggest" title="Ask Claude to write the message from the diff">✨ Suggest</button>
+            <label class="check"><input type="checkbox" id="git-amend"> Amend</label>
+            <span class="grow"></span>
+            <button id="git-commit-btn" class="primary">Commit</button>
+          </div>
+        </div>
+        <details id="git-history"><summary>History</summary><div id="git-log"></div></details>
+      </div>
+      <div id="git-right">
+        <div id="diff-head"><span id="diff-path" class="muted">Select a file to see its changes</span><span class="grow"></span>
+          <label class="check"><input type="checkbox" id="diff-inline"> Inline</label>
+          <button id="diff-open" hidden>Open in editor</button></div>
+        <div id="diff"></div>
+      </div>
+    </div>
+    <div id="git-none" class="empty" hidden></div>
+  </section>
+
+  <!-- New project -->
+  <section data-tab="new" id="new">
+    <div class="page">
+      <h1>New project</h1>
+      <p class="muted">Creates the folder in <code id="new-root"></code>, adds it to the project list and opens it in the widget.</p>
+      <label>Name<input id="new-name" placeholder="my-app" spellcheck="false"></label>
+      <div id="new-templates"></div>
+      <label class="check"><input type="checkbox" id="new-git" checked> Git repository with a first commit</label>
+      <label class="check"><input type="checkbox" id="new-install" checked> Install dependencies afterwards (in a terminal tab)</label>
+      <label class="check" id="new-gh-row"><input type="checkbox" id="new-gh"> Create a private GitHub repository and push</label>
+      <div class="row"><button id="new-create" class="primary">Create project</button><span id="new-status"></span></div>
+    </div>
+  </section>
+
+  <!-- Usage -->
+  <section data-tab="usage" id="usage">
+    <header class="bar">
+      <span id="usage-note" class="muted"></span>
+      <span class="grow"></span>
+      <label class="check"><input type="checkbox" id="usage-default"> Include ~/.claude (Claude outside the widget)</label>
+      <button id="usage-refresh">Refresh</button>
+    </header>
+    <div class="page wide">
+      <div id="usage-cards" class="cards"></div>
+      <h2>Last 30 days</h2>
+      <div id="usage-chart"></div>
+      <h2>Sessions</h2>
+      <table id="usage-sessions"><thead><tr><th>Project</th><th>Last active</th><th>Models</th><th class="num">Tokens</th><th class="num">Cost</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- System -->
+  <section data-tab="system" id="system">
+    <div class="page wide">
+      <div id="mon" class="cards">
+        <div class="card"><div class="k">CPU</div><div class="v" id="m-cpu">–</div><canvas id="c-cpu" height="48"></canvas><div class="sub" id="m-cpu-sub"></div><div id="m-cores"></div></div>
+        <div class="card"><div class="k">Memory</div><div class="v" id="m-mem">–</div><canvas id="c-mem" height="48"></canvas><div class="sub" id="m-mem-sub"></div></div>
+        <div class="card"><div class="k">GPU</div><div class="v" id="m-gpu">–</div><canvas id="c-gpu" height="48"></canvas><div class="sub" id="m-gpu-sub"></div></div>
+        <div class="card"><div class="k">Disk</div><div class="v" id="m-disk">–</div><div class="bar-meter"><i id="m-disk-bar"></i></div><div class="sub" id="m-disk-sub"></div></div>
+      </div>
+      <p class="muted small" id="m-temp-note"></p>
+
+      <h2>Snapshot</h2>
+      <div class="panel">
+        <p id="snap-text" class="muted"></p>
+        <div class="row"><button id="snap-create" class="primary">Create snapshot</button><button id="snap-restore">Open restore</button><span id="snap-status"></span></div>
+      </div>
+
+      <h2>Benchmark</h2>
+      <div class="panel">
+        <p class="muted">About 10 seconds: hashing on one and all cores, memory copies, disk writes. Run it before a tweak, then after, and compare. Close heavy apps first for steady numbers.</p>
+        <div class="row"><input id="bench-label" placeholder="Label, e.g. before power plan change"><button id="bench-run" class="primary">Run benchmark</button><span id="bench-status"></span></div>
+        <div class="row" id="bench-pick" hidden>Compare <select id="bench-a"></select> with baseline <select id="bench-b"></select><button id="bench-del" title="Delete the selected run">Delete run</button></div>
+        <table id="bench-table" hidden><thead><tr><th>Test</th><th class="num">This run</th><th class="num">Baseline</th><th class="num">Change</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Changes -->
+  <section data-tab="changes" id="changes">
+    <header class="bar">
+      <span>Before system changes:</span>
+      <select id="guard-mode"><option value="ask">Claude asks first</option><option value="log">Only log them</option><option value="off">Off</option></select>
+      <span class="grow"></span>
+      <button id="changes-dir">Backups folder</button>
+      <button id="changes-refresh">Refresh</button>
+    </header>
+    <div class="page wide">
+      <p class="muted">Every registry, service, boot, power, package, kernel or system-file command Claude runs in a widget session is logged here with the old values the widget read first. Undo runs the steps in a terminal window (as administrator where needed), newest change first.</p>
+      <div id="changes-list"></div>
+    </div>
+  </section>
+
+  <!-- Logs -->
+  <section data-tab="logs" id="logs">
+    <header class="bar">
+      <select id="log-level"><option value="error">Errors</option><option value="warning">Errors and warnings</option><option value="critical">Critical only</option></select>
+      <select id="log-hours"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option></select>
+      <input id="log-filter" placeholder="Filter" spellcheck="false">
+      <span id="log-count" class="muted"></span>
+      <span class="grow"></span>
+      <label class="check"><input type="checkbox" id="log-follow"> Follow</label>
+      <button id="log-refresh">Refresh</button>
+    </header>
+    <div id="log-list"></div>
+  </section>
+
+  <div id="toast"></div>
+  <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
+  <script src="workbench.js"></script>
+</body>
+</html>

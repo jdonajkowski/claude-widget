@@ -54,6 +54,26 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - Global hotkey to show/hide (default `Ctrl+Alt+Space`), tray icon, pin on top, adjustable opacity, Windows 11 acrylic/mica backdrop
 - The shell stays open after `claude` exits, so quitting Claude drops you at a prompt
 
+### For coding
+
+- **Run button (▶):** lists the project's tasks (package.json scripts with npm/pnpm/yarn/bun, Makefile and justfile targets, Cargo, Go, Python, .NET, Gradle, Maven, CMake, Deno, Composer, Docker Compose) and runs one in a **terminal tab** above the terminal. When a dev server prints its URL (`http://localhost:5173`), it opens in the built-in browser. **New terminal** opens a plain shell tab. Tabs close with ×, restart with Enter after they exit
+- **Git panel** (Workbench → Git): staged and unstaged files, a side-by-side (or inline) diff of what changed, stage / unstage / discard per file or all, commit (Ctrl+Enter; with nothing staged it commits everything), amend, push, pull, history. **✨ Suggest** asks Claude (`claude -p`) to write the commit message from the diff
+- **Git badges** in the files pane: M modified, N new, A added, D deleted, R renamed, U conflict, and a dot on folders with changes
+- **Project search:** the box at the top of the files pane (`Ctrl+Shift+F`) searches file names and contents (plain text, `.*` regex, `Aa` match case), skipping `node_modules`, build output and binaries. Click a hit to open the editor at that line
+- **Worktree sessions:** right-click a git project → **New worktree session…** makes a second checkout on its own branch in `~/Projects/<project>--<branch>`, which shows up in the list (⑂) with its own Claude session, so two sessions can work on the same repo without colliding. **Remove this worktree…** deletes the folder and keeps the branch
+- **New project** (Workbench): starter projects written straight to disk (empty, Node.js tool, Vite web app, Electron app, Python package), each with `AGENTS.md` + a `CLAUDE.md` that imports it, `.gitignore`, optionally a git repo with a first commit, dependencies installed in a terminal tab, and a private GitHub repo (`gh`)
+- **Usage** (Workbench): cost and tokens per day (last 30 days) and per session with its project, from [ccusage](https://github.com/ryoppippi/ccusage) (run through `npx` if it isn't installed). Without Node.js it counts tokens from Claude's transcripts, without cost
+
+### For tuning the system
+
+- **Safety net:** a hook (`hooks/guard-hook.js`) looks at every Bash/PowerShell command Claude runs in a widget session. System changes (registry, services, scheduled tasks, boot configuration, power plans, Windows features, Defender, firewall and network, environment variables, files in `C:\Windows`/`Program Files` and the hosts file; on Linux sudo, pacman/apt/dnf, systemctl, sysctl and `/proc/sys`/`/sys`, files in `/etc` and `/boot`, bootloader, kernel modules, disks, CPU/GPU tuning, firewall, users) make Claude **ask first**, even in auto-accept modes. Before asking, the hook reads the old state and records how to undo it. Settings → General or the shield menu switches it to *only log* or *off*
+- **Changes and undo** (Workbench → Changes): each change with its command, whether it ran, and its undo steps: registry values put back (or removed if they were new), deleted keys re-imported from an export, service startup types and running state, power plan and power settings, environment variables, execution policy, Defender settings, scheduled tasks, Windows features, winget/choco packages, sysctl and sysfs values, systemd units, pacman/apt/dnf packages, backed-up `/etc` files, GPU power limits and clocks, CPU governor, power profiles. **Undo** runs them in a terminal window, as administrator (UAC) when needed, newest change first; **Copy undo script** copies them. Commands without an automatic undo say so
+- **Snapshots** (Workbench → Monitor & snapshots, or the shield menu): a Windows restore point (lifting Windows' one-per-day limit for that one), or a Timeshift/Snapper snapshot on Linux, plus a button to open System Restore / Timeshift
+- **System monitor:** CPU (with per-core bars), memory, GPU (nvidia-smi, or amdgpu on Linux: load, temperature, VRAM, power, clock) and disk, live in the side panel and with history graphs in the Workbench. CPU temperature comes from hwmon on Linux; on Windows it needs [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) running, since Windows only shows it to administrators
+- **Benchmark:** a 10-second run (single-core and all-core hashing, memory copies, disk writes and flushes). Label runs ("before", "after power plan"), pick a baseline, and see the change in percent
+- **Admin terminal** (shield button ⛨): a terminal tab running as administrator after one UAC prompt (Linux: `sudo -s`), or **Claude as administrator** on Windows, with the widget's hooks, so the safety net still applies. Admin tabs are red and turn the window frame red while in front
+- **Logs** (Workbench): errors and warnings from the Windows Event Log (System, Application) or the systemd journal, for the last hour, day or week, with a filter and auto-refresh. **Ask Claude** pastes an entry into the active session as a question about it; you review it and press Enter
+
 ## Keyboard and mouse
 
 | Action | Shortcut |
@@ -67,6 +87,9 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 | Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
 | Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
+| Search the project | `Ctrl+Shift+F` (`Esc` clears) |
+| Open the Workbench | `Ctrl+Shift+G`, or the title-bar grid button |
+| Next / previous terminal tab | `Ctrl+PageDown` / `Ctrl+PageUp` |
 | Collapse / expand the right panel | `Ctrl+Shift+W`, the › button in its header, or click the collapsed strip |
 | Font size | `Ctrl+=` / `Ctrl+-` |
 | Maximize / restore | Title-bar □ button, or double-click the title bar |
@@ -77,7 +100,7 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 | Save in the editor / settings | `Ctrl+S` |
 | Browser: address bar, reload, DevTools, back / forward | `Ctrl+L`, `F5` (`Shift` skips the cache), `F12`, `Alt+←` / `Alt+→` |
 
-Title-bar buttons: project list, files, browser on the left; restart, more/less transparent, pin on top, settings, maximize, hide to tray, quit on the right.
+Title-bar buttons: project list, files, browser, run (▶), admin and system (shield), Workbench (grid) on the left; restart, more/less transparent, pin on top, settings, maximize, hide to tray, quit on the right.
 
 ## Settings
 
@@ -89,6 +112,9 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `claudeCommand` | last `shellArgs` element, else `claude` | Command each project's session runs. ` --continue` is added the first time a project with Claude history is opened |
 | `claudeConfigDir` | `~/Projects/.claude` | Claude Code's config folder for widget sessions (`CLAUDE_CONFIG_DIR`). Empty: `~/.claude` |
 | `claudeHooks` | `true` | Pass the widget's hooks and status line to each session (see below) |
+| `guardMode` | `"ask"` | System change safety net: `"ask"` before system changes, `"log"` only records them with their undo, `"off"` |
+| `showSysmon` | `true` | CPU, memory and GPU in the side panel |
+| `autoOpenDevServer` | `true` | Open the URL a Run-menu dev server prints in the built-in browser |
 | `projectsRoot` | `~/Projects` | Every subfolder (except names starting with `.`) is listed as a project |
 | `cwd` | home folder | Project to open at launch when no project was open last time, if it is in the list |
 | `env` | `{}` | Extra environment variables for the sessions |
@@ -179,13 +205,24 @@ src/log-tail.js          Tails the hook event log
 src/footer.js            Status footer formatting
 src/git-status.js        Git branch and changes for the footer
 src/md-links.js          Finds Markdown paths in terminal text
+src/system-guard.js      Which commands change the system, and how to undo them; the change log
+src/aux-sessions.js      Terminal tabs (tasks, shells, admin); src/admin-shell.js + admin-helper.js elevate them
+src/tasks.js             Run menu: a project's tasks, dev server URLs
+src/git-ops.js           Git panel, files pane badges and worktrees
+src/search.js            Project search
+src/sysmon.js            System monitor sampling; src/bench.js + bench-runner.js the benchmark
+src/syslogs.js           Event Log / journal reader
+src/usage.js             Usage from ccusage or Claude's transcripts
+src/templates.js         New project templates
+src/workbench-main.js    Workbench window and its IPC
 src/preload.js           Bridge exposed to the main window as window.widget
 src/renderer/            Main window UI: terminals, project rail, files pane
 src/editor/              Editor window (Monaco)
 src/settings/            Settings window
 src/browser/             Browser toolbar
 src/md/                  Markdown popout window
-hooks/                   workers-hook.js and statusline-tee.js, run by Claude Code
+src/workbench/           Workbench window: Git, New project, Usage, Monitor, Changes, Logs
+hooks/                   workers-hook.js, statusline-tee.js and guard-hook.js, run by Claude Code
 scripts/build-linux.sh   Builds the Linux packages
 scripts/install-linux.sh Installs the latest release on Linux
 test/                    Unit tests (npm test)

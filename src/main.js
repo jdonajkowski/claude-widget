@@ -13,6 +13,14 @@ const launch = require('./claude-launch');
 const setupChecks = require('./setup-checks');
 const { createBrowser } = require('./browser-window');
 const { isLocalUrl } = require('./browser-url');
+const { createAux } = require('./aux-sessions');
+const { startElevated } = require('./admin-shell');
+const tasks = require('./tasks');
+const gitOps = require('./git-ops');
+const { searchProject } = require('./search');
+const { createSampler } = require('./sysmon');
+const { setupWorkbench } = require('./workbench-main');
+const { buildLaunch } = require('./sessions');
 
 const isWin = process.platform === 'win32';
 
@@ -36,6 +44,13 @@ const DEFAULT_CONFIG = {
   // Pass the widget's hooks and status line wrapper to each Claude session (--settings), so
   // ~/.claude/settings.json needs nothing added. Off: wire them up there yourself (see README).
   claudeHooks: true,
+  // System change safety net (hooks/guard-hook.js): "ask" before registry, service, boot, package... changes,
+  // "log" records them and their undo without asking, "off" does neither.
+  guardMode: 'ask',
+  // CPU, memory, GPU and temperature strip in the side panel.
+  showSysmon: true,
+  // Open the URL a Run-menu dev server prints in the built-in browser.
+  autoOpenDevServer: true,
   alwaysOnTop: true,
   opacity: 0.95,
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
@@ -108,6 +123,9 @@ const claudeSettingsPath = path.join(userDir, 'claude-settings.json');
 const claudeDir = () => dataDirs.expandHome(config.claudeConfigDir, os.homedir()) || path.join(os.homedir(), '.claude');
 const claudeEnv = () => (config.claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeDir() } : {});
 const globalClaudeSettings = () => readJson(path.join(claudeDir(), 'settings.json'), {});
+// The guard hook's change log and file/registry backups (see hooks/guard-hook.js).
+const changesDir = path.join(userDir, 'changes');
+const guardEnv = () => ({ CLAUDE_WIDGET_CHANGES: changesDir, CLAUDE_WIDGET_GUARD: config.guardMode || 'ask' });
 
 // First run with a separate config folder: copy ~/.claude into it (not the sign-in token, see data-dirs.js).
 let pendingToast = null;
@@ -124,7 +142,7 @@ function launchInfo() {
   const env = { ...process.env, ...config.env };
   const node = launch.findOnPath(isWin ? ['node.exe'] : ['node'], { env, isWin });
   const gitBash = isWin ? launch.findGitBash({ env }) : null;
-  return { env, node, gitBash, ...launch.sessionSettings({ hooksDir, execPath: process.execPath, node, isWin, gitBash, global: globalClaudeSettings() }) };
+  return { env, node, gitBash, ...launch.sessionSettings({ hooksDir, execPath: process.execPath, node, isWin, gitBash, global: globalClaudeSettings(), guard: (config.guardMode || 'ask') !== 'off' }) };
 }
 
 function writeSessionSettings() {
@@ -146,9 +164,48 @@ const sessions = createSessions({
   send,
   settingsFile: writeSessionSettings,
   claudeDir,
-  extraEnv: claudeEnv,
+  extraEnv: () => ({ ...claudeEnv(), ...guardEnv() }),
   onStatus: (id) => { if (id === activeId) pollGit(); }
 });
+
+// Extra terminal tabs per project (src/aux-sessions.js): Run-menu tasks, plain and admin shells.
+const aux = createAux({
+  pty,
+  isWin,
+  send,
+  startElevated: (o) => startElevated({ execPath: process.execPath, helper: path.join(__dirname, 'admin-helper.js'), ...o }),
+  onUrl: (_a, url) => {
+    if (config.autoOpenDevServer === false) return send('toast', `Dev server at ${url}`);
+    browser.open(url);
+  },
+  onChange: () => send('aux:list', aux.list())
+});
+const auxEnv = () => ({ ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...claudeEnv(), ...guardEnv(), ...config.env });
+
+// kind: task (runs command), shell, admin (elevated shell), admin-claude (elevated Claude session, Windows).
+function openAux(projectId, { kind, title, command }) {
+  const cwd = projectPath(projectId);
+  if (!cwd || !fs.existsSync(cwd)) { send('toast', 'Open a project first'); return null; }
+  let launchSpec;
+  let elevated = false;
+  if (kind === 'admin') {
+    launchSpec = isWin ? tasks.auxLaunch({ shell: config.shell, isWin }) : { file: 'sudo', args: ['-s'] };
+    elevated = isWin;
+  } else if (kind === 'admin-claude') {
+    launchSpec = buildLaunch(config, { cont: false, isWin, settingsFile: writeSessionSettings() });
+    elevated = true;
+  } else {
+    launchSpec = tasks.auxLaunch({ shell: config.shell, isWin, command });
+  }
+  const id = aux.open({ projectId, cwd, title, kind, launch: launchSpec, env: auxEnv(), elevated }, 100, 30);
+  if (win) { win.show(); win.focus(); }
+  send('aux:select', { id, projectId });
+  return id;
+}
+const startTask = (projectId, t) => openAux(projectId, { kind: 'task', title: t.label, command: t.command });
+
+// Terminal tabs and Claude sessions share the PTY channels; aux ids start with "aux:".
+const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
@@ -341,6 +398,10 @@ function scanRoot() {
 function scanProjects() {
   const scanned = scanRoot();
   const list = projects.buildList({ scanned: scanned || [], pinned: saved.pinned, hidden: saved.hidden, exists: (p) => fs.existsSync(p), isWin });
+  for (const p of list) {
+    const main = p.missing ? null : gitOps.worktreeMain(p.path);
+    if (main) p.worktreeOf = path.basename(main);
+  }
   // A running session keeps its row even if its folder disappeared or was hidden, until it is closed.
   const known = new Set(list.map((p) => p.id));
   for (const id of sessions.ids()) {
@@ -408,15 +469,62 @@ ipcMain.handle('project:open', (_e, { id, cols, rows }) => {
 });
 
 function closeSession(id) {
+  aux.closeProject(id);
   if (!sessions.close(id)) return;
   send('session:closed', { id });
   scanProjects();
 }
 
-ipcMain.on('pty:input', (_e, { id, data }) => sessions.write(id, data));
-ipcMain.on('pty:resize', (_e, { id, cols, rows }) => sessions.resize(id, cols, rows));
-ipcMain.on('pty:restart', (_e, { id, cols, rows }) => sessions.restart(id, cols, rows));
-ipcMain.on('session:close', (_e, { id }) => closeSession(id));
+ipcMain.on('pty:input', (_e, { id, data }) => (aux.has(id) ? aux.write(id, data) : sessions.write(id, data)));
+ipcMain.on('pty:resize', (_e, { id, cols, rows }) => (aux.has(id) ? aux.resize(id, cols, rows) : sessions.resize(id, cols, rows)));
+ipcMain.on('pty:restart', (_e, { id, cols, rows }) => (aux.has(id) ? aux.restart(id, cols, rows) : sessions.restart(id, cols, rows)));
+ipcMain.on('session:close', (_e, { id }) => (aux.has(id) ? aux.close(id) : closeSession(id)));
+ipcMain.handle('aux:get', () => aux.list());
+
+// The run button: the project's tasks (src/tasks.js) and a new terminal.
+ipcMain.on('run:menu', () => {
+  const id = activeId;
+  const root = projectPath(id);
+  if (!root || !win) return;
+  const list = tasks.detectTasks(root, { isWin });
+  const items = [];
+  const groups = [...new Set(list.map((t) => t.group))];
+  for (const g of groups) {
+    const inGroup = list.filter((t) => t.group === g).map((t) => ({ label: t.label, sublabel: t.command, click: () => startTask(id, t) }));
+    if (groups.length > 1 && inGroup.length > 6) items.push({ label: g, submenu: inGroup });
+    else items.push({ label: g, enabled: false }, ...inGroup);
+    items.push({ type: 'separator' });
+  }
+  if (!list.length) items.push({ label: 'No tasks found in this project', enabled: false }, { type: 'separator' });
+  items.push({ label: 'New terminal', click: () => openAux(id, { kind: 'shell', title: 'Terminal' }) });
+  Menu.buildFromTemplate(items).popup({ window: win });
+});
+
+// The shield button: admin terminals, the system change guard, snapshots and the system views.
+ipcMain.on('admin:menu', () => {
+  if (!win) return;
+  const id = activeId;
+  const mode = config.guardMode || 'ask';
+  const setMode = (m) => {
+    setConfig({ guardMode: m });
+    send('toast', m === 'off' ? 'System change guard off' : m === 'log' ? 'System changes are logged, not asked about' : 'Claude asks before system changes');
+  };
+  Menu.buildFromTemplate([
+    { label: isWin ? 'Admin terminal (UAC)' : 'Root shell (sudo -s)', enabled: !!projectPath(id), click: () => openAux(id, { kind: 'admin', title: 'Admin' }) },
+    ...(isWin ? [{ label: 'Claude as administrator (UAC)', enabled: !!projectPath(id), click: () => openAux(id, { kind: 'admin-claude', title: 'Admin Claude' }) }] : []),
+    { type: 'separator' },
+    { label: 'Create snapshot…', click: () => workbench.open('system') },
+    { label: 'System changes and undo…', click: () => workbench.open('changes') },
+    { label: 'System monitor and benchmark…', click: () => workbench.open('system') },
+    { label: 'Logs…', click: () => workbench.open('logs') },
+    { type: 'separator' },
+    { label: 'Before system changes', enabled: false },
+    { label: 'Ask first', type: 'radio', checked: mode === 'ask', click: () => setMode('ask') },
+    { label: 'Only log them', type: 'radio', checked: mode === 'log', click: () => setMode('log') },
+    { label: 'Off', type: 'radio', checked: mode === 'off', click: () => setMode('off') }
+  ]).popup({ window: win });
+});
+ipcMain.on('workbench:open', (_e, tab) => workbench.open(tab));
 
 // Row context menu: Close session, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
 ipcMain.on('project:menu', (_e, { id }) => {
@@ -425,6 +533,12 @@ ipcMain.on('project:menu', (_e, { id }) => {
   const items = [];
   if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
+  // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
+  if (!p.missing && fs.existsSync(path.join(p.path, '.git'))) {
+    items.push({ type: 'separator' }, { label: 'New worktree session…', click: () => send('worktree:ask', { id, name: p.worktreeOf || p.name }) });
+    if (p.worktreeOf) items.push({ label: 'Remove this worktree…', click: () => removeWorktree(p) });
+  }
+  items.push({ type: 'separator' });
   if (p.pinned) {
     items.push({ label: 'Unpin', click: () => { saved.pinned = saved.pinned.filter((x) => projects.normId(x, isWin) !== id); saveProjects(); } });
   } else if (!p.orphan) {
@@ -456,6 +570,56 @@ async function addFolder() {
   if (!saved.pinned.some((x) => projects.normId(x, isWin) === id)) saved.pinned.push(dir);
   saveProjects();
   send('projects:select', { id });
+}
+
+ipcMain.handle('worktree:create', async (_e, { id, branch }) => {
+  const p = projectList.find((x) => x.id === id);
+  const b = String(branch || '').trim();
+  if (!p || p.missing) return { error: 'Project not found' };
+  if (!gitOps.validBranch(b)) return { error: 'Not a valid branch name' };
+  const st = await gitOps.status(p.path);
+  if (!st.repo) return { error: 'Not a git repository' };
+  const mainDir = gitOps.worktreeMain(p.path) || st.top;
+  const dir = gitOps.worktreeDir(projectsRoot(), path.basename(mainDir), b);
+  if (fs.existsSync(dir)) return { error: `${dir} already exists` };
+  const r = await gitOps.addWorktree(st.top, dir, b);
+  if (!r.ok) return { error: r.err || 'git worktree add failed' };
+  addProject(dir);
+  return { ok: true, dir };
+});
+
+async function removeWorktree(p) {
+  const mainDir = gitOps.worktreeMain(p.path);
+  if (!mainDir) return;
+  const choice = dialog.showMessageBoxSync(win, {
+    type: 'question', buttons: ['Remove', 'Cancel'], defaultId: 1, cancelId: 1,
+    message: `Remove the worktree ${p.name}?`,
+    detail: `Deletes the folder ${p.path}. Its branch stays in ${path.basename(mainDir)}; commits on it are kept.`
+  });
+  if (choice !== 0) return;
+  closeSession(p.id);
+  let r = await gitOps.removeWorktree(mainDir, p.path, false);
+  if (!r.ok && /modified or untracked|contains/.test(r.err)) {
+    const force = dialog.showMessageBoxSync(win, {
+      type: 'warning', buttons: ['Remove anyway', 'Cancel'], defaultId: 1, cancelId: 1,
+      message: 'This worktree has changes that are not committed.', detail: 'Removing it throws those changes away.'
+    });
+    if (force !== 0) return;
+    r = await gitOps.removeWorktree(mainDir, p.path, true);
+  }
+  if (!r.ok) send('toast', `Could not remove the worktree: ${r.err}`);
+  saved.pinned = saved.pinned.filter((x) => projects.normId(x, isWin) !== p.id);
+  saveProjects();
+}
+
+// A new folder (wizard, worktree) as a project: listed by the scan if it is in the projects folder, else pinned.
+function addProject(dir) {
+  const id = projects.normId(dir, isWin);
+  if (projects.normId(path.dirname(dir), isWin) !== projects.normId(projectsRoot(), isWin) && !saved.pinned.some((x) => projects.normId(x, isWin) === id)) saved.pinned.push(dir);
+  saved.hidden = saved.hidden.filter((x) => projects.normId(x, isWin) !== id);
+  saveProjects();
+  send('projects:select', { id });
+  return id;
 }
 
 ipcMain.on('rail:toggle', () => {
@@ -583,13 +747,13 @@ function findMd(p, id) {
 ipcMain.handle('md:resolve', (_e, { candidates, id }) => {
   if (!Array.isArray(candidates)) return null;
   for (let i = 0; i < candidates.length && i < 16; i++) {
-    const file = findMd(candidates[i], id);
+    const file = findMd(candidates[i], owner(id));
     if (file) return { index: i, file };
   }
   return null;
 });
 ipcMain.on('md:open', (_e, { file: p, id }) => {
-  const file = findMd(p, id);
+  const file = findMd(p, owner(id));
   if (file) openMd(file);
 });
 // Links inside a popout: web links go to the browser, other Markdown files open in their own popout.
@@ -761,6 +925,25 @@ ipcMain.on('files:open', (_e, { id, rel }) => {
   else shell.openPath(file);
 });
 
+let searchSeq = 0;
+ipcMain.handle('files:search', async (_e, { id, query, regex, caseSensitive }) => {
+  const root = projectPath(id);
+  if (!root) return null;
+  const seq = ++searchSeq;
+  const r = await searchProject(root, query, { regex, caseSensitive, isCancelled: () => seq !== searchSeq });
+  return r && { ...r, root };
+});
+ipcMain.handle('files:git', async (_e, { id }) => {
+  const root = projectPath(id);
+  if (!root) return null;
+  const st = await gitOps.status(root);
+  return st.repo ? gitOps.badgeMap(st.files, st.prefix) : null;
+});
+ipcMain.on('files:openAt', (_e, { id, rel, line }) => {
+  const file = fileTarget(id, rel);
+  if (file && fs.existsSync(file)) openEditor(file, Number(line) || undefined);
+});
+
 ipcMain.on('files:menu', (_e, { id, rel, dir }) => {
   const file = fileTarget(id, rel);
   if (!file || !win) return;
@@ -862,9 +1045,19 @@ ipcMain.handle('settings:save', (_e, formValues) => {
   state.alwaysOnTop = !!config.alwaysOnTop;
   writeJson(statePath, state);
   if (before.hotkey !== config.hotkey && !registerHotkey(config.hotkey)) warnings.push(`Hotkey ${config.hotkey} is taken or invalid`);
-  send('config:changed', { alwaysOnTop: state.alwaysOnTop });
+  watchSysmon();
+  send('config:changed', { alwaysOnTop: state.alwaysOnTop, showSysmon: config.showSysmon !== false });
   return { form: effectiveSettings(), restart, errors: warnings };
 });
+
+function setConfig(values) {
+  const raw = readJson(configPath, {});
+  writeJson(configPath, { ...raw, ...values });
+  config = loadConfig();
+  watchSysmon();
+  send('config:changed', { alwaysOnTop: win ? win.isAlwaysOnTop() : config.alwaysOnTop, showSysmon: config.showSysmon !== false });
+  return { ok: true };
+}
 
 ipcMain.handle('settings:browse', async (_e, current) => {
   const r = await dialog.showOpenDialog(settingsWin || win, { defaultPath: current || os.homedir(), properties: ['openDirectory'] });
@@ -960,15 +1153,17 @@ ipcMain.handle('setup:get', async () => {
 });
 
 // Runs a command from the setup table in a new terminal window, so the user sees prompts and output.
+// Same Claude config folder as widget sessions, so "Sign in" signs those sessions in.
+const spawnDetached = (cmd, args) => new Promise((resolve) => {
+  try {
+    const child = spawnProcess(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false, env: { ...process.env, ...claudeEnv() } });
+    child.on('error', () => resolve(false));
+    child.on('spawn', () => { child.unref(); resolve(true); });
+  } catch { resolve(false); }
+});
+
 function runInTerminal(command) {
-  const tryRun = (cmd, args) => new Promise((resolve) => {
-    try {
-      // Same Claude config folder as widget sessions, so "Sign in" signs those sessions in.
-      const child = spawnProcess(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false, env: { ...process.env, ...claudeEnv() } });
-      child.on('error', () => resolve(false));
-      child.on('spawn', () => { child.unref(); resolve(true); });
-    } catch { resolve(false); }
-  });
+  const tryRun = spawnDetached;
   if (isWin) return tryRun('powershell.exe', ['-NoExit', '-NoProfile', '-Command', command]);
   const script = `${command}; echo; read -p "Done. Press Enter to close."`;
   const terms = [
@@ -1040,6 +1235,64 @@ ipcMain.handle('agents:save', (_e, text) => {
 });
 
 // ---------------------------------------------------------------------------
+// Workbench (src/workbench-main.js) and the system monitor
+// ---------------------------------------------------------------------------
+const sampleListeners = [];
+const sampler = createSampler({ isWin, onSample: (smp) => { send('sys:sample', smp); for (const fn of sampleListeners) fn(smp); } });
+// The side panel's strip samples while the widget is visible; the Workbench adds its own watcher.
+function watchSysmon() {
+  sampler.want('main', !!(config.showSysmon !== false && win && !win.isDestroyed() && win.isVisible()));
+}
+
+const which = (name) => launch.findOnPath([name], { env: { ...process.env, ...config.env }, isWin });
+
+// ccusage when installed, else through npx (both run through a shell on Windows, so names, not paths).
+function ccusageCommand() {
+  if (which(isWin ? 'ccusage.cmd' : 'ccusage') || which(isWin ? 'ccusage.exe' : 'ccusage')) return { file: 'ccusage', args: [] };
+  if (which(isWin ? 'npx.cmd' : 'npx')) return { file: 'npx', args: ['-y', 'ccusage@latest'] };
+  return null;
+}
+
+// Pastes text into the active project's Claude prompt (bracketed paste, not sent), for the user to review.
+function sendToSession(text) {
+  if (!activeId || !sessions.has(activeId)) return { error: 'Open a project session in the widget first' };
+  sessions.write(activeId, `\x1b[200~${text}\x1b[201~`);
+  send('aux:select', { id: activeId, projectId: activeId });
+  if (win) { win.show(); win.focus(); }
+  return { ok: true };
+}
+
+const workbench = setupWorkbench({
+  ipcMain,
+  isWin,
+  userDir,
+  home: os.homedir(),
+  icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+  background: () => config.theme.background,
+  changesDir,
+  sampler,
+  onSample: (fn) => sampleListeners.push(fn),
+  config: () => config,
+  setConfig,
+  activeProject: () => activeId,
+  projectInfo: (id) => projectList.find((p) => p.id === id) || null,
+  projectPath,
+  projectsRoot,
+  openEditor,
+  findClaude: () => findTool(setupChecks.TOOLS.find((t) => t.id === 'claude')),
+  claudeEnv,
+  claudeDir,
+  runInTerminal,
+  spawnDetached,
+  which,
+  benchDir: () => userDir,
+  sendToSession,
+  ccusageCommand,
+  addProject,
+  startTask
+});
+
+// ---------------------------------------------------------------------------
 // Window controls from the renderer
 // ---------------------------------------------------------------------------
 ipcMain.handle('config:get', () => ({
@@ -1051,7 +1304,9 @@ ipcMain.handle('config:get', () => ({
   opacity: win ? win.getOpacity() : config.opacity,
   rail: { collapsed: !!state.railCollapsed, width: railWidth() },
   filesOpen: !!state.filesOpen,
-  sideCollapsed: !!state.sideCollapsed
+  sideCollapsed: !!state.sideCollapsed,
+  showSysmon: config.showSysmon !== false,
+  isWin
 }));
 ipcMain.on('side:setCollapsed', (_e, collapsed) => {
   state.sideCollapsed = !!collapsed;
@@ -1109,6 +1364,7 @@ function createTray() {
     { label: 'Restart Claude session', click: () => send('pty:restartActive') },
     { label: 'Settings…', click: () => openSettings() },
     { label: 'Setup…', click: () => openSettings('setup') },
+    { label: 'Workbench…', click: () => workbench.open() },
     { label: 'Reset window position', click: () => win && setBoundsExact(fitWorkArea(withRail(defaultBounds()))) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
@@ -1126,6 +1382,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     createWindow();
+    for (const ev of ['show', 'hide', 'minimize', 'restore']) win.on(ev, watchSysmon);
+    win.once('ready-to-show', watchSysmon);
     createTray();
     if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => openSettings('setup'), 600));
     registerHotkey(config.hotkey);
@@ -1134,6 +1392,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     sessions.closeAll();
+    aux.closeAll();
+    sampler.stop();
     if (rootWatcher) rootWatcher.close();
     clearInterval(statusTimer);
     clearInterval(gitTimer);
@@ -1164,5 +1424,6 @@ if (!app.requestSingleInstanceLock()) {
     for (const e of editors.values()) { e.forceClose = true; if (!e.win.isDestroyed()) e.win.destroy(); }
     for (const md of mdWindows.values()) if (!md.isDestroyed()) md.destroy();
     browser.close();
+    workbench.close();
   });
 }

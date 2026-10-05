@@ -32,6 +32,8 @@ test('normalize clamps numbers, falls back to defaults and reports bad values', 
 test('normalize only returns fields the form sent', () => {
   assert.deepEqual(normalize({ hotkey: ' Control+Alt+K ' }, defaults).values, { hotkey: 'Control+Alt+K' });
   assert.deepEqual(normalize({ claudeHooks: '' }, defaults).values, { claudeHooks: false });
+  assert.deepEqual(normalize({ guardMode: 'log', showSysmon: 1, autoOpenDevServer: false }, defaults).values, { guardMode: 'log', showSysmon: true, autoOpenDevServer: false });
+  assert.deepEqual(normalize({ guardMode: 'yes' }, defaults).errors.length, 1);
 });
 
 test('toForm turns args and env into text', () => {
