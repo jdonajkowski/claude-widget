@@ -830,9 +830,10 @@
       return null;
     }
   }));
-  widget.projects.onRenameAsk(({ id, name, folder }) => ask({
+  // Starts from the name shown, which is a 0.8.0 display name if one was set, so renaming the folder to it is one click.
+  widget.projects.onRenameAsk(({ id, name, path, open }) => ask({
     title: `Rename ${name}`,
-    text: `The name shown in the project list and title bar. The folder stays "${folder}". Leave empty to use the folder name.`,
+    text: `Renames the folder ${path}.${open ? ' Its Claude session restarts and picks up the same conversation; terminals open in it close.' : ''}`,
     value: name,
     ok: 'Rename',
     submit: async (value) => {

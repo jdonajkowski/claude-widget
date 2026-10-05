@@ -18,6 +18,7 @@ const { createAux } = require('./aux-sessions');
 const { startElevated } = require('./admin-shell');
 const tasks = require('./tasks');
 const gitOps = require('./git-ops');
+const projectRename = require('./project-rename');
 const { searchProject } = require('./search');
 const { createSampler } = require('./sysmon');
 const { setupWorkbench } = require('./workbench-main');
@@ -563,7 +564,7 @@ ipcMain.on('project:menu', (_e, { id }) => {
   if (!p || !win) return;
   const items = [];
   if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
-  items.push({ label: 'Rename…', click: () => send('project:renameAsk', { id, name: p.name, folder: p.folder }) });
+  items.push({ label: 'Rename…', enabled: !p.missing && !p.orphan, click: () => send('project:renameAsk', { id, name: p.name, path: p.path, open: sessions.has(id) }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
   if (!p.missing && fs.existsSync(path.join(p.path, '.git'))) {
@@ -604,12 +605,44 @@ async function addFolder() {
   send('projects:select', { id });
 }
 
-// Renames a project in Gremlin only (projects.json); the folder keeps its name. Empty goes back to the folder name.
-ipcMain.handle('project:rename', (_e, { id, name }) => {
-  if (!projectList.some((x) => x.id === id)) return { error: 'Project not found' };
-  saved.names = projects.setName(saved.names, id, name);
+// Renames a project's folder and Claude's history for it (project-rename.js), then reopens its session,
+// which continues the same conversation. Everything running in the folder is stopped first: Windows won't
+// rename a folder a process is working in. If it still can't, the session comes back under the old name.
+ipcMain.handle('project:rename', async (_e, { id, name }) => {
+  const p = projectList.find((x) => x.id === id);
+  if (!p || p.missing || p.orphan) return { error: 'Project not found' };
+  const n = String(name || '').trim();
+  const bad = projectRename.nameError(n, isWin);
+  if (bad) return { error: bad };
+  const to = path.join(path.dirname(p.path), n);
+  const newId = projects.normId(to, isWin);
+  const unname = () => { saved.names = projects.setName(saved.names, id, ''); }; // a 0.8.0 display name
+  if (to === p.path) { unname(); saveProjects(); return { id }; }
+  if (newId !== id && fs.existsSync(to)) return { error: `${path.dirname(p.path)} already has a folder named ${n}.` };
+
+  const reopen = sessions.has(id) && activeId === id;
+  closeSession(id);
+  browser.releaseDir(p.path);
+  const err = await projectRename.renameWithRetry(p.path, to);
+  if (err) {
+    if (reopen) send('projects:select', { id });
+    return { error: err.code === 'ENOENT' ? `${p.path} is gone.` : `Something still has the folder open (an editor, Explorer, or a program started from it). Close it and try again. (${err.code || err.message})` };
+  }
+  try {
+    projectRename.moveHistory(claudeDir(), p.path, to, { isWin });
+  } catch (e) {
+    send('toast', `Renamed, but Claude's history stayed under the old name: ${e.message}`);
+  }
+  // Worktrees keep absolute paths to each other; git fixes them from either side.
+  if (fs.existsSync(path.join(to, '.git'))) await gitOps.git(to, ['worktree', 'repair']);
+  const same = (x) => projects.normId(x, isWin) === id;
+  saved.pinned = saved.pinned.map((x) => (same(x) ? to : x));
+  saved.hidden = saved.hidden.filter((x) => !same(x));
+  unname();
+  if (state.activeProject === id) { state.activeProject = newId; writeJson(statePath, state); }
   saveProjects();
-  return {};
+  if (reopen) send('projects:select', { id: newId });
+  return { id: newId };
 });
 
 ipcMain.handle('worktree:create', async (_e, { id, branch }) => {

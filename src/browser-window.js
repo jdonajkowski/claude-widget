@@ -16,6 +16,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
   let view = null;
   let device = 'full';
   let watcher = null;
+  let watchedDir = null;
   let reloadTimer;
   const pageListeners = []; // src/browser-control.js: told about each new page view
 
@@ -51,6 +52,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
 
   function watchLocal(url) {
     if (watcher) { watcher.close(); watcher = null; }
+    watchedDir = null;
     if (!/^file:/i.test(url)) return;
     let dir;
     try { dir = path.dirname(fileURLToPath(url)); } catch { return; }
@@ -60,9 +62,21 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
         reloadTimer = setTimeout(() => view && view.webContents.reloadIgnoringCache(), 250);
       });
       watcher.on('error', () => { watcher = null; });
+      watchedDir = dir;
     } catch {
       watcher = null;
     }
+  }
+
+  // Stops watching a folder inside dir, which is about to be renamed (Windows won't rename a folder that
+  // is being watched). The page stays; it just no longer reloads by itself.
+  function releaseDir(dir) {
+    if (!watcher || !watchedDir) return;
+    const rel = path.relative(dir, watchedDir);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return;
+    watcher.close();
+    watcher = null;
+    watchedDir = null;
   }
 
   function create() {
@@ -236,6 +250,7 @@ function createBrowser({ background, icon, projectDir = () => null, isWin }) {
     device: () => device,
     page: () => (view && !view.webContents.isDestroyed() ? view.webContents : null),
     onPage: (fn) => pageListeners.push(fn),
+    releaseDir,
     handle,
     close: () => { if (win && !win.isDestroyed()) win.destroy(); }
   };
