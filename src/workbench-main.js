@@ -187,7 +187,8 @@ function setupWorkbench(d) {
     return (await d.runInTerminal(cmd)) ? { ok: true, how: tool } : { error: 'No terminal found' };
   });
   on('wb:snapshot:openRestore', () => {
-    if (isWin) d.spawnDetached('rstrui.exe', []);
+    // rstrui.exe asks for admin rights, so spawning it directly fails (EACCES); start it through UAC.
+    if (isWin) d.spawnDetached('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "Start-Process -FilePath 'rstrui.exe' -Verb RunAs"]);
     else if (d.which('timeshift-launcher')) d.spawnDetached('timeshift-launcher', []);
     else if (d.which('timeshift-gtk')) d.spawnDetached('timeshift-gtk', []);
   });
