@@ -14,6 +14,7 @@
     const byId = new Map(poses.map((p) => [p.id, p]));
     const box = doc.createElement('div');
     box.id = 'guard';
+    box.className = 'glow'; // a thin pale outline keeps the dark cable and spear shaft readable on the terminal
     box.hidden = true;
     const img = doc.createElement('img');
     img.alt = '';
