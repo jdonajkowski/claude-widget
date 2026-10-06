@@ -22,9 +22,13 @@ function clip(text) {
   return oneLine.length > LABEL_MAX ? oneLine.slice(0, LABEL_MAX - 1) + '…' : oneLine;
 }
 
+// Claude's own list of background tasks, sent with Stop and SubagentStop (checked against 2.1.289): each
+// { id, type: 'shell' | 'agent' | ..., status: 'running' | ..., description, command }. ids is kept for older
+// readers; tasks carries the details so tasks no other hook announced still get a row.
 function snapshot(p, ts) {
-  const tasks = Array.isArray(p.background_tasks) ? p.background_tasks : [];
-  return { t: 'snapshot', ids: tasks.map((x) => x && x.id).filter((id) => typeof id === 'string'), ts, src: p.hook_event_name };
+  const list = (Array.isArray(p.background_tasks) ? p.background_tasks : []).filter((x) => x && typeof x.id === 'string');
+  const tasks = list.map((x) => ({ id: x.id, kind: String(x.type || 'task'), status: String(x.status || ''), label: clip(x.description || x.command || x.type || x.id) }));
+  return { t: 'snapshot', ids: list.map((x) => x.id), tasks, ts, src: p.hook_event_name };
 }
 
 // Every claude started inside the widget inherits GREMLIN_WORKERS (e.g. a `claude -p` run from Bash),
@@ -85,7 +89,7 @@ function eventsFor(p, ts) {
       const done = toolEvent(p, 'end', ts);
       const task = taskEvent(p, ts);
       if (task) return [...done, task];
-      if (!get(p, ['tool_input', 'run_in_background'])) return done;
+      // A background task id: started with run_in_background, or a running command sent there with Ctrl+B.
       const id = TASK_ID_PATHS.map((k) => get(p, k)).find((v) => typeof v === 'string' && v);
       return id ? [...done, { t: 'start', id, kind: 'shell', label: clip(get(p, ['tool_input', 'command']) || p.tool_name), ts }] : done;
     }

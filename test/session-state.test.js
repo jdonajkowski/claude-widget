@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { initial, apply, dot } = require('../src/session-state');
+const { initial, apply, dot, isTyping } = require('../src/session-state');
 
 const run = (events, isActive = false) => events.reduce((s, e) => apply(s, e, isActive), initial());
 
@@ -55,4 +55,26 @@ test('unknown events leave state unchanged', () => {
   const s = initial();
   assert.equal(apply(s, { t: 'bogus' }, false), s);
   assert.equal(apply(s, null, false), s);
+});
+
+test('isTyping: keys and pastes count; focus, mouse and query replies do not', () => {
+  for (const d of ['y', '1', '\r', '\x7f', '\x1b[A', '\x1b[B', '\x1b[200~text\x1b[201~', '\x03']) assert.equal(isTyping(d), true, JSON.stringify(d));
+  const automatic = [
+    '\x1b[I', '\x1b[O', // focus in / out
+    '\x1b[<35;10;5M', '\x1b[<0;10;5m', '\x1b[<35;10;5M\x1b[<35;11;5M', // SGR mouse motion, release, a burst
+    '\x1b[M #!', // X10 mouse
+    '\x1bP>|xterm.js(6.0.0)\x1b\\', // XTVERSION reply
+    '\x1b]11;rgb:1f1f/1e1e/1d1d\x07', // OSC colour reply
+    '\x1b[?0u', '\x1b[?1;2c', '\x1b[>0;276;0c', '\x1b[12;40R', '\x1b[?997;1n' // kitty flags, DA1, DA2, cursor position, colour scheme
+  ];
+  for (const d of automatic) assert.equal(isTyping(d), false, JSON.stringify(d));
+  assert.equal(isTyping('\x1b[<35;10;5My'), true); // a key mixed in still counts
+});
+
+test('a question stays until real input or the end of the turn', () => {
+  let s = apply(initial(), { t: 'progress', state: 3 }, true);
+  s = apply(s, { t: 'attention' }, true);
+  assert.equal(dot(s), 'attention');
+  s = apply(s, { t: 'progress', state: 0 }, true);
+  assert.equal(s.attention, false);
 });
