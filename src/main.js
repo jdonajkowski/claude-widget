@@ -1256,9 +1256,10 @@ ipcMain.handle('setup:get', async () => {
 
 // Runs a command from the setup table in a new terminal window, so the user sees prompts and output.
 // Same Claude config folder as widget sessions, so "Sign in" signs those sessions in.
-const spawnDetached = (cmd, args) => new Promise((resolve) => {
+// detached: false for a launcher that asks for UAC (Start-Process -Verb RunAs): started with no console of its own, PowerShell never shows the prompt.
+const spawnDetached = (cmd, args, { detached = true } = {}) => new Promise((resolve) => {
   try {
-    const child = spawnProcess(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false, env: { ...process.env, ...claudeEnv() } });
+    const child = spawnProcess(cmd, args, { detached, stdio: 'ignore', windowsHide: !detached, env: { ...process.env, ...claudeEnv() } });
     child.on('error', () => resolve(false));
     child.on('spawn', () => { child.unref(); resolve(true); });
   } catch { resolve(false); }

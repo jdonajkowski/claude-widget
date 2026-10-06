@@ -63,7 +63,7 @@ function setupWorkbench(d) {
     const args = ['-NoExit', '-NoProfile', '-EncodedCommand', encode(script)];
     if (!admin) return d.spawnDetached('powershell.exe', args);
     const list = args.map((a) => psq(a)).join(',');
-    return d.spawnDetached('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList ${list}`]);
+    return d.spawnDetached('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList ${list}`], { detached: false });
   }
 
   // --- Context -----------------------------------------------------------------------------------
@@ -173,9 +173,10 @@ function setupWorkbench(d) {
         "$key = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore'",
         "$old = (Get-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency",
         "Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value 0 -Type DWord",
-        "try { Write-Host 'Creating a restore point (this can take a minute)...' -ForegroundColor Cyan; Checkpoint-Computer -Description $desc -RestorePointType MODIFY_SETTINGS -ErrorAction Stop; Write-Host \"Restore point created: $desc\" -ForegroundColor Green }",
+        "try { Write-Host 'Creating a restore point (this can take a minute)...' -ForegroundColor Cyan; Checkpoint-Computer -Description $desc -RestorePointType MODIFY_SETTINGS -ErrorAction Stop; Write-Host \"Restore point created: $desc\" -ForegroundColor Green; $ok = $true }",
         "catch { Write-Host \"Could not create a restore point: $($_.Exception.Message)\" -ForegroundColor Red; Write-Host \"If System Protection is off, turn it on with: Enable-ComputerRestore -Drive 'C:\\'\" }",
-        "finally { if ($null -eq $old) { Remove-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue } else { Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value $old -Type DWord } }"
+        "finally { if ($null -eq $old) { Remove-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue } else { Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value $old -Type DWord } }",
+        "if ($ok) { Write-Host 'This window closes in 3 seconds.'; Start-Sleep -Seconds 3; exit }"
       ].join('\n');
       return (await psWindow(script, { admin: true })) ? { ok: true, how: 'restore point' } : { error: 'Could not start PowerShell' };
     }
@@ -188,7 +189,7 @@ function setupWorkbench(d) {
   });
   on('wb:snapshot:openRestore', () => {
     // rstrui.exe asks for admin rights, so spawning it directly fails (EACCES); start it through UAC.
-    if (isWin) d.spawnDetached('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "Start-Process -FilePath 'rstrui.exe' -Verb RunAs"]);
+    if (isWin) d.spawnDetached('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "Start-Process -FilePath 'rstrui.exe' -Verb RunAs"], { detached: false });
     else if (d.which('timeshift-launcher')) d.spawnDetached('timeshift-launcher', []);
     else if (d.which('timeshift-gtk')) d.spawnDetached('timeshift-gtk', []);
   });
