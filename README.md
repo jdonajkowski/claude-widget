@@ -133,6 +133,8 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `opacity` | `0.95` | 0.3–1 |
 | `backgroundMaterial` | `"none"` | `"acrylic"`, `"mica"` or `"tabbed"` (Windows 11 22H2+) |
 | `showInTaskbar` | `false` | Needs to be `true` for taskbar progress |
+| `launchOnStartup` | `false` | Start Gremlin at sign-in (installed app on Windows and macOS) |
+| `startMinimized` | `false` | Open hidden in the tray, or minimized when `showInTaskbar` is on |
 | `hotkey` | `Control+Alt+Space` | Electron accelerator syntax |
 | `fontFamily` / `fontSize` | Cascadia Mono, 13 | |
 | `theme` | dark | xterm.js theme colors |
