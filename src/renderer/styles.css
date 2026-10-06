@@ -646,16 +646,13 @@ body.no-mascot #mascot, body.no-mascot #ledge, body.rail-collapsed #mascot, body
 @media (prefers-reduced-motion: reduce) { #mascot svg, #mascot.ducking svg { transition: none; } }
 #mascot.away { visibility: hidden; }
 
-/* Guarding (renderer.js): after guardMinutes idle, Glitch climbs out of the rail and peeks up over the
-   bottom edge of the window below the terminal, glancing side to side. Click-through; any activity sends
-   him back. The rules below the moods (.gremlin) apply to both copies. */
-#guard { position: fixed; z-index: 20; aspect-ratio: 360 / 177; transform-origin: 0 0; pointer-events: none; }
-#guard svg { display: block; width: 100%; height: 100%; overflow: visible; user-select: none; }
-#guard.watching { --lid: -34px; }
-#guard.watching svg { animation: m-look 7s ease-in-out infinite; }
-#guard.ducking svg { transform: translateY(70%); opacity: 0; transition: transform 0.18s ease-in, opacity 0.18s; animation: none; }
-@keyframes m-look { 0%, 20%, 100% { transform: none; } 35%, 45% { transform: translateX(-4%); } 60%, 70% { transform: translateX(4%); } }
-@media (prefers-reduced-motion: reduce) { #guard.watching svg { animation: none; } }
+/* Guarding (renderer.js, guard-actor.js): after guardMinutes idle, Glitch climbs out over the bottom edge of the
+   terminal, pulls his spear up from below it and patrols along it. The box is clipped at that edge, so anything
+   below it is hidden. Click-through; any activity ducks him back. Add class "glow" to #guard if the dark cable
+   and spear shaft vanish against the terminal background. */
+#guard { position: fixed; z-index: 20; overflow: hidden; pointer-events: none; }
+#guard img { position: absolute; bottom: 0; display: block; max-width: none; user-select: none; -webkit-user-drag: none; }
+#guard.glow img { filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.55)); }
 
 /* Blinking: an eyelid slides down over each eye, clipped below the brows (index.html). --lid is how far
    it is up when open: all the way, or partly while working (a concentrating squint). */
