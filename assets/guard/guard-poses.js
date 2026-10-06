@@ -97,7 +97,7 @@ window.GuardPoses = {
                       "facing":  "front",
                       "ledge":  false,
                       "edgeY":  704,
-                      "scale":  1,
+                      "scale":  0.83,
                       "source":  "chew_spear_c.jpg"
                   },
                   {
@@ -108,7 +108,7 @@ window.GuardPoses = {
                       "facing":  "front",
                       "ledge":  false,
                       "edgeY":  703,
-                      "scale":  1,
+                      "scale":  0.83,
                       "source":  "type_spear_a.jpg"
                   }
               ]
