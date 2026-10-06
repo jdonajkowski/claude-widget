@@ -61,3 +61,8 @@ test('normalize keeps guardMinutes a whole number from 0 to 240', () => {
   assert.equal('guardMinutes' in bad.values, false);
   assert.match(bad.errors[0], /Guard minutes/);
 });
+
+test('launchOnStartup and startMinimized are booleans', () => {
+  assert.deepEqual(normalize({ launchOnStartup: 1, startMinimized: 0 }, defaults).values, { launchOnStartup: true, startMinimized: false });
+  assert.deepEqual(normalize({}, defaults).values, {});
+});

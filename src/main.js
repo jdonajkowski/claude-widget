@@ -64,6 +64,9 @@ const DEFAULT_CONFIG = {
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
   backgroundMaterial: 'none',
   showInTaskbar: false,
+  // Start Gremlin when you sign in (installed app only); open hidden in the tray, or minimized when it is in the taskbar.
+  launchOnStartup: false,
+  startMinimized: false,
   hotkey: 'Control+Alt+Space',
   fontFamily: "'Cascadia Mono', 'Cascadia Code', Consolas, 'Courier New', monospace",
   fontSize: 13,
@@ -280,6 +283,8 @@ function boundsAreVisible(b) {
     b.x < w.x + w.width && b.x + b.width > w.x && b.y < w.y + w.height && b.y + b.height > w.y);
 }
 
+let startQuiet = true;
+
 function createWindow() {
   const bounds = fitWorkArea(withRail(state.bounds && boundsAreVisible(state.bounds) ? state.bounds : defaultBounds()));
   const material = isWin && config.backgroundMaterial !== 'none' ? config.backgroundMaterial : undefined;
@@ -312,10 +317,16 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // Maximize only after showing at the normal bounds: maximizing a hidden frameless window
   // makes Windows restore it a few pixels off.
+  // Start minimized applies to the window opened at launch only; the hotkey or tray reopens it normally.
+  const quiet = startQuiet && config.startMinimized;
+  startQuiet = false;
   win.once('ready-to-show', () => {
-    win.show();
+    // In the tray (no taskbar button) it simply stays hidden; with a taskbar button it opens minimized.
+    if (quiet && !config.showInTaskbar) return;
+    if (quiet) win.showInactive(); else win.show();
     setBoundsExact(bounds);
     if (state.maximized) win.maximize();
+    if (quiet) win.minimize();
   });
 
   const saveState = () => {
@@ -365,6 +376,12 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
+// The sign-in entry only makes sense for the installed app (a dev run would register electron.exe); Linux has no such API.
+function applyLoginItem() {
+  if (!app.isPackaged || process.platform === 'linux') return;
+  app.setLoginItemSettings({ openAtLogin: !!config.launchOnStartup });
+}
+
 function clampOpacity(v) {
   return Math.min(1, Math.max(0.3, Number(v) || 1));
 }
@@ -374,6 +391,7 @@ function toggleWindow() {
   if (win.isVisible() && win.isFocused()) {
     win.hide();
   } else {
+    if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
   }
@@ -1118,6 +1136,7 @@ ipcMain.handle('settings:save', (_e, formValues) => {
     win.setOpacity(clampOpacity(config.opacity));
     win.setAlwaysOnTop(!!config.alwaysOnTop, 'floating');
   }
+  applyLoginItem();
   state.opacity = config.opacity;
   state.alwaysOnTop = !!config.alwaysOnTop;
   writeJson(statePath, state);
@@ -1468,11 +1487,13 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     if (control) await control.start().catch((err) => console.error('gremlin-browser endpoint:', err.message));
+    applyLoginItem();
     createWindow();
     for (const ev of ['show', 'hide', 'minimize', 'restore']) win.on(ev, watchSysmon);
     win.once('ready-to-show', watchSysmon);
     createTray();
-    if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => openSettings('setup'), 600));
+    // Shown once: closing the window without pressing Done must not bring it back on every launch.
+    if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => { state.setupDone = true; writeJson(statePath, state); openSettings('setup'); }, 600));
     registerHotkey(config.hotkey);
     const target = openTarget(process.argv, process.cwd());
     if (target) win.once('ready-to-show', () => browser.open(target));

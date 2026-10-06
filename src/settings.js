@@ -52,6 +52,8 @@ function normalize(form, defaults) {
   if ('hotkey' in f) values.hotkey = str(f.hotkey);
   if ('alwaysOnTop' in f) values.alwaysOnTop = !!f.alwaysOnTop;
   if ('showInTaskbar' in f) values.showInTaskbar = !!f.showInTaskbar;
+  if ('launchOnStartup' in f) values.launchOnStartup = !!f.launchOnStartup;
+  if ('startMinimized' in f) values.startMinimized = !!f.startMinimized;
   if ('claudeHooks' in f) values.claudeHooks = !!f.claudeHooks;
   if ('fontFamily' in f) values.fontFamily = str(f.fontFamily) || defaults.fontFamily;
   if ('showSysmon' in f) values.showSysmon = !!f.showSysmon;
