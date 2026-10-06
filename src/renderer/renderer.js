@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -131,13 +131,12 @@
   // It blinks every few seconds (sometimes twice) and now and then waves. Skipped while it can't be seen,
   // and entirely when Windows asks for less animation.
   const still = window.matchMedia('(prefers-reduced-motion: reduce)');
-  // Whichever copy is showing: the one on the ledge, or the one out guarding.
+  // The rail copy only: while Glitch is out guarding he is a pose card (guard-actor.js) and the rail copy is hidden.
   const play = (cls) => {
-    const el = guarding ? guardBox : mascot;
-    if (still.matches || document.hidden || el.classList.contains('ducking') || (!guarding && mascot.offsetParent === null)) return;
-    el.classList.remove(cls);
-    void el.getBoundingClientRect(); // restart the animation if it is already set
-    el.classList.add(cls);
+    if (guarding || still.matches || document.hidden || mascot.classList.contains('ducking') || mascot.offsetParent === null) return;
+    mascot.classList.remove(cls);
+    void mascot.getBoundingClientRect(); // restart the animation if it is already set
+    mascot.classList.add(cls);
   };
   const endPlay = (e) => {
     if (e.animationName === 'm-blink') e.currentTarget.classList.remove('blink');
@@ -155,112 +154,61 @@
   waveLoop();
 
   // --- Guarding: after guardMinutes with no key, click or mouse movement in Gremlin and nothing from Claude,
-  // Glitch climbs out of the rail and peeks up over the bottom edge of the window below the terminal,
-  // keeping watch and now and then shuffling along it. Any activity sends him straight back to the ledge.
-  // The guarding copy is a second SVG with its own ids (url(#…) references must not point into the rail's).
-  const guardBox = document.createElement('div');
-  guardBox.id = 'guard';
-  guardBox.className = 'gremlin';
-  guardBox.hidden = true;
-  guardBox.innerHTML = mascot.querySelector('svg').outerHTML.replace(/(id="|url\(#|href="#)m-/g, '$1g-');
-  document.body.appendChild(guardBox);
-  guardBox.addEventListener('animationend', endPlay);
+  // Glitch climbs out over the bottom edge of the terminal, pulls his spear up from below it and patrols along
+  // it, now and then stopping to chew a cable or type (guard-routine.js decides, guard-actor.js draws the pose
+  // cards). Any activity ducks him straight back to the rail.
+  const GR = WidgetGuardRoutine;
+  const guardActor = WidgetGuardActor.createGuardActor({ hostEl: $('terminal'), poses: GuardPoses.poses });
   let guardMs = (cfg.guardMinutes ?? 5) * 60000;
-  let patrolTimer;
+  let deploying = false;
+  let guardRun = 0;
 
   function noteActivity() {
     lastActive = Date.now();
     if (guarding) recall();
   }
   for (const type of ['keydown', 'mousedown', 'mousemove', 'wheel', 'resize']) window.addEventListener(type, noteActivity, { capture: true, passive: true });
-  setInterval(() => {
-    if (!guarding && guardMs > 0 && mood === 'idle' && !document.hidden && $('modal').hidden && Date.now() - lastActive >= guardMs) deploy();
-  }, 5000);
+  const guardCheck = () => ({ guarding, deploying, guardMs, lastActive, now: Date.now(), mood, hidden: document.hidden, modalOpen: !$('modal').hidden });
+  setInterval(() => { if (GR.canDeploy(guardCheck())) deploy(); }, 5000);
 
-  function deploy() {
+  async function deploy() {
     if (document.body.classList.contains('no-mascot') || mascot.offsetParent === null) return;
-    const from = mascot.getBoundingClientRect();
     const host = $('terminal').getBoundingClientRect();
-    if (!from.width || host.width < 260 || host.height < 160) return;
-    guarding = true;
-    const w = Math.round(from.width * 1.25);
-    const h = Math.round((w * 177) / 360);
-    const x = host.right - w - 28;
-    const y = host.bottom - h;
-    Object.assign(guardBox.style, { width: `${w}px`, left: `${x}px`, top: `${y}px` });
-    guardBox.classList.remove('ducking');
-    guardBox.hidden = false;
-    mascot.classList.add('away');
-    if (still.matches) return settle();
-    // Climbs up out of the ledge, then scurries over hand over hand (the drumming fingers), shrinking from
-    // the rail's size to his own.
-    guardBox.classList.add('working');
-    const dx = from.left - x;
-    const dy = from.top - y;
-    const s = from.width / w;
-    const at = (k, up, rot) => `translate(${dx * (1 - k)}px, ${dy * (1 - k) - up}px) scale(${s + (1 - s) * k}) rotate(${rot}deg)`;
-    const frames = [
-      { offset: 0, transform: at(0, 0, 0) },
-      { offset: 0.18, transform: at(0, h * 0.45, 0) },
-      { offset: 0.32, transform: at(0.2, h * 0.3, -5) },
-      { offset: 0.46, transform: at(0.4, h * 0.15, 5) },
-      { offset: 0.6, transform: at(0.6, h * 0.25, -5) },
-      { offset: 0.74, transform: at(0.8, h * 0.1, 5) },
-      { offset: 0.88, transform: at(0.95, h * 0.12, -2) },
-      { offset: 1, transform: 'none' }
-    ];
-    guardBox.animate(frames, { duration: 2600, easing: 'ease-in-out' }).onfinish = settle;
-  }
-
-  function settle() {
-    if (!guarding) return;
-    guardBox.classList.remove('working');
-    guardBox.classList.add('watching');
-    clearTimeout(patrolTimer);
-    patrolTimer = later(12000, 30000, patrol);
-  }
-
-  // Shuffles a stretch along the bottom of the terminal, a hop per step.
-  function patrol() {
-    if (!guarding || still.matches) return;
-    const host = $('terminal').getBoundingClientRect();
-    const w = guardBox.offsetWidth;
-    const minX = host.left + 16;
-    const maxX = host.right - w - 16;
-    const cur = parseFloat(guardBox.style.left);
-    if (maxX - minX < w) return settle();
-    let to = minX + Math.random() * (maxX - minX);
-    if (Math.abs(to - cur) < w * 0.6) to = cur > (minX + maxX) / 2 ? minX + (maxX - minX) * 0.2 : maxX - (maxX - minX) * 0.2;
-    const d = to - cur;
-    const steps = Math.max(2, Math.round(Math.abs(d) / (w * 0.35)));
-    const frames = [];
-    for (let i = 0; i <= steps; i++) {
-      if (i > 0) frames.push({ offset: (i - 0.5) / steps, transform: `translate(${(d * (i - 0.5)) / steps}px, -8px)` });
-      frames.push({ offset: i / steps, transform: `translate(${(d * i) / steps}px, 0)` });
+    if (!mascot.getBoundingClientRect().width || host.width < 260 || host.height < 160) return;
+    deploying = true;
+    try {
+      await guardActor.load();
+    } catch (err) {
+      console.warn(`Glitch stays on the rail: ${err.message}`); // a missing pose card must not leave a half-drawn guard
+      return;
+    } finally {
+      deploying = false;
     }
-    guardBox.classList.replace('watching', 'working');
-    const a = guardBox.animate(frames, { duration: steps * 320 });
-    a.onfinish = () => {
-      guardBox.style.left = `${to}px`;
-      a.cancel();
-      settle();
-    };
+    // The poses took a moment to load: only go if nothing happened meanwhile.
+    if (!GR.canDeploy(guardCheck())) return;
+    guarding = true;
+    mascot.classList.add('away');
+    if (still.matches) return guardActor.deployStill();
+    guardActor.deploy();
+    const mine = ++guardRun;
+    let state = GR.initial(Math.random);
+    while (guarding && guardRun === mine) {
+      const out = GR.advance(state, Math.random);
+      state = out.state;
+      if (!(await guardActor.run(out.step))) break;
+    }
   }
 
   function recall() {
     guarding = false;
-    clearTimeout(patrolTimer);
-    for (const a of guardBox.getAnimations()) a.cancel();
-    guardBox.classList.remove('working', 'watching', 'blink', 'wave');
-    guardBox.classList.add('ducking');
-    setTimeout(() => { if (!guarding) guardBox.hidden = true; }, 200);
+    guardRun++;
+    guardActor.recall();
     // Back on the ledge: starts ducked and peeks up.
     mascot.classList.add('ducking');
     mascot.classList.remove('away');
     clearTimeout(duckTimer);
     duckTimer = setTimeout(() => mascot.classList.remove('ducking'), 350);
   }
-
   // --- Files pane ---------------------------------------------------------
   const filesPane = WidgetFilesPane.createFilesPane({ el: $('files'), widget, open: cfg.filesOpen });
   $('btn-files').onclick = () => { filesPane.toggle(); terminals.focus(); };
