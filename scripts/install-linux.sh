@@ -24,7 +24,15 @@ echo "Downloading ${url##*/}…"
 curl -fL --progress-bar -o "$file" "$url"
 
 if [ "$ext" = '.pacman' ]; then
-  sudo pacman -U "$file"
+  # Piped into bash, stdin is the script itself, so pacman's "Proceed?" prompt
+  # would read end-of-input and cancel. Answer it from the terminal instead.
+  if [ -t 0 ]; then
+    sudo pacman -U "$file"
+  elif (: </dev/tty) 2>/dev/null; then
+    sudo pacman -U "$file" </dev/tty
+  else
+    sudo pacman -U --noconfirm "$file"
+  fi
   if pacman -Q claude-desktop-widget >/dev/null 2>&1; then
     echo "Removing Claude Widget (the old name of this app)…"
     sudo pacman -R --noconfirm claude-desktop-widget
