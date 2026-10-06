@@ -18,11 +18,11 @@ test('SubagentStart -> start agent', () => {
 
 test('SubagentStop -> stop + snapshot', () => {
   const ev = toEvents({ hook_event_name: 'SubagentStop', agent_id: 'ag1', background_tasks: [{ id: 'b1', type: 'shell' }] }, 7);
-  assert.deepEqual(ev, [{ t: 'stop', id: 'ag1', ts: 7 }, { t: 'snapshot', ids: ['b1'], ts: 7, src: 'SubagentStop' }]);
+  assert.deepEqual(ev, [{ t: 'stop', id: 'ag1', ts: 7 }, { t: 'snapshot', ids: ['b1'], tasks: [{ id: 'b1', kind: 'shell', status: '', label: 'shell' }], ts: 7, src: 'SubagentStop' }]);
 });
 
 test('Stop -> snapshot (empty when no background_tasks)', () => {
-  assert.deepEqual(toEvents({ hook_event_name: 'Stop' }, 9), [{ t: 'snapshot', ids: [], ts: 9, src: 'Stop' }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'Stop' }, 9), [{ t: 'snapshot', ids: [], tasks: [], ts: 9, src: 'Stop' }]);
 });
 
 test('PostToolUse background Bash -> start shell with clipped one-line label', () => {
@@ -99,7 +99,7 @@ test('concurrent hooks write intact lines', async () => {
 test('events carry the session id, and snapshots their source hook', () => {
   assert.deepEqual(toEvents({ hook_event_name: 'SubagentStart', session_id: 'S1', agent_id: 'ag1', agent_type: 'Explore' }, 5),
     [{ t: 'start', id: 'ag1', kind: 'agent', label: 'Explore', ts: 5, sid: 'S1' }]);
-  assert.deepEqual(toEvents({ hook_event_name: 'Stop', session_id: 'S1' }, 9), [{ t: 'snapshot', ids: [], ts: 9, src: 'Stop', sid: 'S1' }]);
+  assert.deepEqual(toEvents({ hook_event_name: 'Stop', session_id: 'S1' }, 9), [{ t: 'snapshot', ids: [], tasks: [], ts: 9, src: 'Stop', sid: 'S1' }]);
 });
 
 test('script outside the widget still consumes a large stdin cleanly', () => {
@@ -133,4 +133,11 @@ test('PostToolUse logs the tool end before a background shell start or task chan
   assert.deepEqual(shell.map((e) => e.t), ['tool', 'start']);
   const task = toEvents({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_use_id: 'toolu_4', tool_input: { taskId: '1', status: 'completed' } }, 9);
   assert.deepEqual(task.map((e) => e.t), ['tool', 'task']);
+});
+
+test('snapshot carries Claude task details; Ctrl+B-backgrounded commands start a row too', () => {
+  const [s] = toEvents({ hook_event_name: 'Stop', background_tasks: [{ id: 'b1', type: 'shell', status: 'running', description: 'ping -n 25 127.0.0.1', command: 'ping -n 25 127.0.0.1' }, null, { type: 'x' }] }, 4);
+  assert.deepEqual(s, { t: 'snapshot', ids: ['b1'], tasks: [{ id: 'b1', kind: 'shell', status: 'running', label: 'ping -n 25 127.0.0.1' }], ts: 4, src: 'Stop' });
+  const ev = toEvents({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm run dev' }, tool_response: { backgroundTaskId: 'b2' } }, 5);
+  assert.deepEqual(ev, [{ t: 'start', id: 'b2', kind: 'shell', label: 'npm run dev', ts: 5 }]);
 });

@@ -111,3 +111,34 @@ test('tasks takes a TodoWrite list as a whole', () => {
   const r = tasks([{ t: 'todos', items: [{ subject: 'a', status: 'completed' }, { subject: 'Doing b', status: 'in_progress' }, { subject: 'c', status: 'pending' }], ts: 1 }], 2);
   assert.deepEqual([r.done, r.total, r.current], [1, 3, 'Doing b']);
 });
+
+const snap = (ts, tasks, src = 'Stop', sid) => ({ t: 'snapshot', ids: tasks.map((x) => x.id), tasks, ts, src, sid });
+
+test('a task only Claude lists gets a row, and ends when it is gone or marked ended', () => {
+  let w = reduce([snap(2000, [{ id: 'm1', kind: 'monitor', status: 'running', label: 'watch the build' }])], 2000);
+  assert.deepEqual(w.map((x) => [x.id, x.kind, x.label, x.doneAt]), [['m1', 'monitor', 'watch the build', null]]);
+  w = reduce([snap(2000, [{ id: 'm1', kind: 'monitor', status: 'running', label: 'x' }]), snap(3000, [])], 3000);
+  assert.equal(w[0].doneAt, 3000);
+  w = reduce([snap(2000, [{ id: 'm1', kind: 'monitor', status: 'running', label: 'x' }]), snap(3000, [{ id: 'm1', kind: 'monitor', status: 'completed', label: 'x' }])], 3000);
+  assert.equal(w[0].doneAt, 3000);
+});
+
+test('a listed task that is already over gets no row; a known one listed as ended finishes', () => {
+  assert.deepEqual(reduce([snap(2000, [{ id: 'x', kind: 'shell', status: 'completed', label: 'x' }])], 2000), []);
+  const w = reduce([start('a1', 'agent', 1000), snap(2000, [{ id: 'a1', kind: 'agent', status: 'completed', label: 'a' }], 'SubagentStop')], 2000);
+  assert.equal(w[0].doneAt, 2000);
+});
+
+test('a known worker is not duplicated by the list, and keeps its own label', () => {
+  const w = reduce([start('s1', 'shell', 1000, 'npm run dev'), snap(2000, [{ id: 's1', kind: 'shell', status: 'running', label: 'other' }])], 2000);
+  assert.deepEqual(w.map((x) => [x.id, x.label, x.doneAt]), [['s1', 'npm run dev', null]]);
+});
+
+test("another session's listed rows end when the newest session finishes a turn", () => {
+  const ev = [
+    snap(2000, [{ id: 'c1', kind: 'shell', status: 'running', label: 'child' }], 'Stop', 'child'),
+    snap(3000, [], 'Stop', 'main')
+  ];
+  assert.equal(reduce(ev, 3000)[0].doneAt, 3000);
+  assert.equal(reduce(ev.slice(0, 1), 2500)[0].doneAt, null);
+});

@@ -8,8 +8,12 @@
   const SNAPSHOT_KINDS = ['shell', 'agent'];
   const SUBAGENT_STOP_KINDS = ['shell'];
 
+  // Statuses in Claude's background task list that mean the task is over; anything else counts as running.
+  const ENDED = /^(completed|failed|killed|stopped|cancell?ed|done|error)$/i;
+
   function reduce(events, now) {
     const byId = new Map();
+    let lastStop = null;
     for (const e of events) {
       if (!e || typeof e !== 'object' || typeof e.ts !== 'number') continue;
       if (e.t === 'start' && typeof e.id === 'string' && !byId.has(e.id)) {
@@ -18,13 +22,29 @@
         const w = byId.get(e.id);
         if (w.doneAt === null) w.doneAt = e.ts;
       } else if (e.t === 'snapshot' && Array.isArray(e.ids)) {
-        const live = new Set(e.ids);
+        const tasks = Array.isArray(e.tasks) ? e.tasks.filter((x) => x && typeof x.id === 'string') : [];
+        const ended = new Set(tasks.filter((x) => ENDED.test(x.status || '')).map((x) => x.id));
+        const live = new Set(e.ids.filter((id) => !ended.has(id)));
+        // Tasks only Claude's list knows about (Monitor watches, background agents, ...) get a row from it.
+        for (const x of tasks) {
+          if (!byId.has(x.id) && !ended.has(x.id)) {
+            byId.set(x.id, { id: x.id, kind: String(x.kind || 'task'), label: String(x.label || x.id), startedAt: e.ts, doneAt: null, sid: e.sid, listed: true });
+          }
+        }
         const kinds = e.src === 'SubagentStop' ? SUBAGENT_STOP_KINDS : SNAPSHOT_KINDS;
         for (const w of byId.values()) {
-          if (w.doneAt === null && w.sid === e.sid && kinds.includes(w.kind) && w.startedAt < e.ts && !live.has(w.id)) {
+          if (w.doneAt === null && w.sid === e.sid && (kinds.includes(w.kind) || w.listed || ended.has(w.id)) && w.startedAt < e.ts && !live.has(w.id)) {
             w.doneAt = e.ts;
           }
         }
+        if (e.src === 'Stop') lastStop = e;
+      }
+    }
+    // Rows from another session's list (a `claude -p` run from a session's shell, or the session before
+    // /clear) end once the newest session finishes a turn: nothing else would ever close them.
+    if (lastStop) {
+      for (const w of byId.values()) {
+        if (w.listed && w.doneAt === null && w.sid !== lastStop.sid && w.startedAt < lastStop.ts) w.doneAt = lastStop.ts;
       }
     }
     return [...byId.values()]

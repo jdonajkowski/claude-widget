@@ -730,6 +730,7 @@
         workersEl.insertBefore(row, more);
       }
       row.querySelector('.label').textContent = w.label;
+      row.title = `${{ shell: 'Background command', agent: 'Subagent' }[w.kind] || `Background ${w.kind}`}: ${w.label}`;
       row.querySelector('.time').textContent = fmtElapsed((w.doneAt ?? now) - w.startedAt);
       row.classList.toggle('done', w.doneAt !== null);
     }
