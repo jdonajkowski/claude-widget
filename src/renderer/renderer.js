@@ -69,7 +69,8 @@
     host: $('terminal'),
     toast,
     onFocus: (id) => focusTab(id),
-    onInput: (id) => update(id, { t: 'input' }),
+    // Only real typing answers a question; focus/mouse reports and query replies also come through here.
+    onInput: (id, data) => { if (SS.isTyping(data)) update(id, { t: 'input' }); },
     onProgress: (id, state, value) => {
       if (isAux(id)) return;
       const s = sess(id);

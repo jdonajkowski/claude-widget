@@ -55,7 +55,7 @@
           return;
         }
         widget.pty.write(id, data);
-        onInput(id);
+        onInput(id, data);
       });
       term.onResize(({ cols, rows }) => { if (!t.el.hidden) widget.pty.resize(id, cols, rows); });
 
