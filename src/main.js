@@ -1492,7 +1492,8 @@ if (!app.requestSingleInstanceLock()) {
     for (const ev of ['show', 'hide', 'minimize', 'restore']) win.on(ev, watchSysmon);
     win.once('ready-to-show', watchSysmon);
     createTray();
-    if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => openSettings('setup'), 600));
+    // Shown once: closing the window without pressing Done must not bring it back on every launch.
+    if (!state.setupDone) win.once('ready-to-show', () => setTimeout(() => { state.setupDone = true; writeJson(statePath, state); openSettings('setup'); }, 600));
     registerHotkey(config.hotkey);
     const target = openTarget(process.argv, process.cwd());
     if (target) win.once('ready-to-show', () => browser.open(target));
