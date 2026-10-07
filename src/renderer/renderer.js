@@ -118,6 +118,30 @@
   widget.rail.onState(({ collapsed, width }) => rail.setCollapsed(collapsed, width));
   $('btn-rail').onclick = () => widget.rail.toggle();
 
+  // Drag the rail's right edge to resize it (main.js clamps the width and keeps it); double-click resets it.
+  const railResize = $('rail-resize');
+  const setRailWidth = (w, final) => { rail.setCollapsed(false, w); widget.rail.resize(w, final); };
+  railResize.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    railResize.setPointerCapture(e.pointerId);
+    document.body.classList.add('rail-resizing');
+    const startX = e.clientX;
+    const startW = $('rail').getBoundingClientRect().width;
+    let w = startW;
+    const onMove = (ev) => { w = Math.round(startW + ev.clientX - startX); setRailWidth(w, false); };
+    const onUp = () => {
+      railResize.removeEventListener('pointermove', onMove);
+      railResize.removeEventListener('pointerup', onUp);
+      railResize.removeEventListener('pointercancel', onUp);
+      document.body.classList.remove('rail-resizing');
+      setRailWidth(w, true);
+    };
+    railResize.addEventListener('pointermove', onMove);
+    railResize.addEventListener('pointerup', onUp);
+    railResize.addEventListener('pointercancel', onUp);
+  });
+  railResize.addEventListener('dblclick', () => setRailWidth(170, true));
+
   // The gremlin peeking up over the ledge at the bottom of the project list. It ducks when the mouse comes
   // near and peeks back up a moment later.
   const mascot = $('mascot');

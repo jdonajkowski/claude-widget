@@ -712,3 +712,9 @@ body.no-mascot #mascot, body.no-mascot #ledge, body.rail-collapsed #mascot, body
   .gremlin .m-dot, .gremlin .m-finger, .gremlin .m-think, .gremlin .m-q { animation: none !important; }
   .gremlin.thinking .m-dot { opacity: 1; }
 }
+
+/* The rail's drag handle: a thin strip over its right edge. Hidden while the rail is collapsed. */
+#rail-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
+#rail-resize:hover, body.rail-resizing #rail-resize { background: rgba(217, 119, 87, 0.5); }
+body.rail-collapsed #rail-resize { display: none; }
+body.rail-resizing { user-select: none; cursor: col-resize; }

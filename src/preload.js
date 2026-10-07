@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('widget', {
   },
   rail: {
     toggle: () => ipcRenderer.send('rail:toggle'),
+    resize: (width, final) => ipcRenderer.send('rail:resize', { width, final: !!final }),
     onState: on('rail:state')
   },
   win: {
