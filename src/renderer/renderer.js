@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetTabLinks, WidgetNotify, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetTabLinks, WidgetNotify, WidgetSwitcher, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -923,6 +923,9 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'w') {
       handled();
       setSideCollapsed(!sideCollapsed);
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+      handled();
+      switcher.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -971,6 +974,15 @@
     if (sm !== undefined) { showSysmon = sm; sysEl.hidden = !sm; updateSide(); }
     if (showMascot !== undefined) document.body.classList.toggle('no-mascot', !showMascot);
     if (guardMinutes !== undefined) { guardMs = guardMinutes * 60000; noteActivity(); }
+  });
+
+  // --- Project switcher (Ctrl+Shift+P): type to filter, Enter opens, Ctrl+Enter opens it as a tab ---
+  const switcher = WidgetSwitcher.createSwitcher({
+    el: $('switcher'),
+    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state) })),
+    pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
+    canTab: (id) => !!activeId && id !== activeId,
+    onClose: () => terminals.focus()
   });
 
   // --- Small prompt (worktree branch name, project name) ------------------------

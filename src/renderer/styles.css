@@ -720,3 +720,26 @@ body.rail-collapsed #rail-resize { display: none; }
 body.rail-resizing { user-select: none; cursor: col-resize; }
 
 .tab .pdot { margin-right: 2px; }
+
+/* Project switcher (Ctrl+Shift+P). */
+#switcher { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 60px; background: rgba(0, 0, 0, 0.45); z-index: 11; }
+#switcher[hidden] { display: none; }
+#sw-box {
+  width: min(460px, calc(100% - 32px));
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #262523;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  color: #e8e6e3;
+  font: 12px/18px 'Segoe UI', system-ui, sans-serif;
+}
+#sw-input { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 5px; background: #171615; color: #e8e6e3; font: 13px 'Segoe UI', system-ui, sans-serif; outline: none; user-select: text; }
+#sw-input:focus { border-color: var(--accent); }
+#sw-list { max-height: 320px; overflow-y: auto; margin-top: 6px; }
+.sw-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.sw-row.sel { background: rgba(255, 255, 255, 0.09); }
+.sw-name { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; text-align: right; direction: rtl; }
+.sw-none { padding: 8px; color: var(--muted); }
+#sw-hint { margin-top: 6px; padding: 0 2px; color: var(--muted); font-size: 11px; }

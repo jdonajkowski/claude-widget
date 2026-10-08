@@ -134,6 +134,13 @@
         <div class="modal-buttons"><button type="button" id="modal-cancel">Cancel</button><button type="submit" id="modal-ok">OK</button></div>
       </form>
     </div>
+    <div id="switcher" hidden>
+      <div id="sw-box">
+        <input id="sw-input" placeholder="Go to project…" spellcheck="false" autocomplete="off">
+        <div id="sw-list"></div>
+        <div id="sw-hint">Enter: open · Ctrl+Enter: open as a tab · Esc: close</div>
+      </div>
+    </div>
   </div>
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
@@ -147,9 +154,11 @@
   <script src="../../assets/guard/guard-poses.js"></script>
   <script src="../zones.js"></script>
   <script src="../tab-links.js"></script>
+  <script src="../fuzzy.js"></script>
   <script src="../notify-rules.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>
+  <script src="switcher.js"></script>
   <script src="files-pane.js"></script>
   <script src="guard-actor.js"></script>
   <script src="renderer.js"></script>
