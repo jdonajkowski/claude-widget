@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetTabLinks, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -38,6 +38,7 @@
     s.state = SS.apply(s.state, ev, id === activeId);
     renderRail();
     renderMascot();
+    if (Object.keys(tabLinks).length) renderStrips(currentLayout()); // the state dot on a project's tab
   };
 
   // What the Gremlin acts out follows Claude (mascot-state.js): a ? bubble while any open session has a
@@ -255,6 +256,7 @@
   });
   widget.projects.onSelect(({ id }) => activate(id));
   widget.projects.onClosed(({ id }) => {
+    for (const host of Object.keys(tabLinks)) tabLinks = TL.remove(tabLinks, host, id); // a closed session is not a tab anywhere
     terminals.destroy(id);
     cache.delete(id);
     openIds.delete(id);
@@ -300,6 +302,7 @@
     update(id, { t: 'activate' });
     renderActive();
     terminals.focus();
+    restoreLinks(id);
   }
 
   // --- Terminal tabs: the project's Claude session plus Run-menu tasks, terminals and admin shells ---
@@ -315,9 +318,22 @@
   const zoneState = new Map(); // project id -> zones state
   const zst = () => zoneState.get(activeId) || Z.initial();
   const setZst = (st) => { if (activeId) zoneState.set(activeId, st); };
-  // Other projects' Claude sessions shown as tabs of a project (Open in tab): project id -> Set of project ids.
-  const linked = new Map();
-  const linkedOf = (p) => [...(linked.get(p) || [])].filter((id) => terminals.has(id));
+  // Other projects' Claude sessions shown as tabs of a project (Open in tab, src/tab-links.js). The links and which
+  // of them sat in the lower zone are remembered; a project's links come back when it is first shown after a start.
+  const TL = WidgetTabLinks;
+  const savedLinks = (() => { try { return TL.parse(localStorage.getItem('tabLinks')); } catch { return TL.parse(null); } })();
+  let tabLinks = savedLinks.links;
+  const linkedOf = (p) => TL.of(tabLinks, p).filter((id) => terminals.has(id));
+  function saveLinks() {
+    const bottom = {};
+    for (const host of Object.keys(tabLinks)) {
+      const st = zoneState.get(host);
+      // A project not shown yet this run keeps what was saved for it.
+      const kept = st ? TL.of(tabLinks, host).filter((id) => st.split && st.zone[id] === 1) : TL.of(savedLinks.bottom, host);
+      if (kept.length) bottom[host] = kept;
+    }
+    try { localStorage.setItem('tabLinks', TL.stringify(tabLinks, bottom)); } catch { /* storage off */ }
+  }
   const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)) : []);
   const currentLayout = () => Z.layout(zst(), tabIds());
   const shownView = () => currentLayout().focused || activeId;
@@ -364,24 +380,24 @@
   }
 
   // Open in tab: another project's Claude session joins this project's tabs (it keeps running when removed).
-  async function linkProject(id) {
+  // quiet: bringing back a saved link, so the tab appears without taking focus.
+  async function linkProject(id, { quiet = false } = {}) {
     const p = projects.find((x) => x.id === id);
     if (!p || !activeId || id === activeId) return;
-    if (p.missing && !terminals.has(id)) return toast(`Folder missing: ${p.path}`, 2500);
+    if (p.missing && !terminals.has(id)) return quiet ? undefined : toast(`Folder missing: ${p.path}`, 2500);
     const host = activeId;
     const fresh = !terminals.has(id);
     if (fresh) terminals.create(id);
-    if (!linked.has(host)) linked.set(host, new Set());
-    linked.get(host).add(id);
-    setZst(Z.show(zst(), tabIds(), id));
-    renderTabs(true); // lays it out and fits it, so the session starts at its real size
+    tabLinks = TL.add(tabLinks, host, id);
+    if (!quiet) setZst(Z.show(zst(), tabIds(), id));
+    renderTabs(!quiet); // lays it out and fits it, so the session starts at its real size
     const t = terminals.get(id);
     const ok = await widget.projects.open(id, t.term.cols, t.term.rows, true);
     if (!ok) {
-      linked.get(host).delete(id);
+      tabLinks = TL.remove(tabLinks, host, id);
       if (fresh) terminals.destroy(id);
-      renderTabs(true);
-      return toast(`Folder missing: ${p.path}`, 2500);
+      renderTabs(!quiet);
+      return quiet ? undefined : toast(`Folder missing: ${p.path}`, 2500);
     }
     openIds.add(id);
     update(id, { t: 'activate' });
@@ -389,11 +405,25 @@
   }
 
   function unlinkProject(id) {
-    if (linked.has(activeId)) linked.get(activeId).delete(id);
+    tabLinks = TL.remove(tabLinks, activeId, id);
     setZst(Z.normalize(zst(), tabIds()));
     renderTabs(true);
   }
   widget.projects.onLinkTab(({ id }) => linkProject(id));
+
+  // First time a project is shown in this run: its saved links come back (their sessions start), lower-zone ones below.
+  const linksRestored = new Set();
+  async function restoreLinks(host) {
+    if (linksRestored.has(host)) return;
+    linksRestored.add(host);
+    const down = TL.of(savedLinks.bottom, host);
+    for (const id of TL.of(tabLinks, host)) {
+      if (activeId !== host) { linksRestored.delete(host); return; } // switched away: try again next time
+      if (!projects.some((x) => x.id === id)) { tabLinks = TL.remove(tabLinks, host, id); continue; } // folder gone
+      await linkProject(id, { quiet: true });
+      if (activeId === host && down.includes(id) && tabIds().includes(id)) moveTab(id, 1);
+    }
+  }
 
   function makeTab(t, on) {
     const el = document.createElement('div');
@@ -403,6 +433,12 @@
     const label = document.createElement('span');
     label.className = 'tlabel';
     label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
+    // A project's Claude session (the first tab, or one opened in a tab) shows its state like the sidebar does.
+    if (t.kind === 'claude') {
+      const dot = document.createElement('span');
+      dot.className = `pdot ${openIds.has(t.id) ? SS.dot(sess(t.id).state) : 'idle'}`;
+      el.appendChild(dot);
+    }
     el.appendChild(label);
     // A linked project tab only leaves this view: its session keeps running.
     const close = () => (t.linked ? unlinkProject(t.id) : widget.aux.close(t.id));
@@ -462,6 +498,7 @@
       if (focus) terminals.focus();
     }
     renderStrips(L);
+    saveLinks();
   }
 
   // Dropping a tab on a zone (its strip or terminal) moves it there; on the drop area below, splits.

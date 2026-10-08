@@ -233,13 +233,11 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
-const RAIL_EXPANDED = 170; // the default; dragging the rail's right edge sets state.railWidth
-const RAIL_MIN = 120;
-const RAIL_MAX = 400;
+const autostart = require('./autostart');
+const railLimits = require('./rail-width'); // dragging the rail's right edge sets state.railWidth
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
-const clampRail = (w) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(Number(w)) || RAIL_EXPANDED));
-const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : clampRail(state.railWidth ?? RAIL_EXPANDED));
+const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : railLimits.clamp(state.railWidth ?? railLimits.DEFAULT));
 // Rail width when the window was maximized or went full screen, to fix the size on the way back.
 let zoomRail = null;
 
@@ -325,7 +323,10 @@ function createWindow() {
   startQuiet = false;
   win.once('ready-to-show', () => {
     // In the tray (no taskbar button) it simply stays hidden; with a taskbar button it opens minimized.
-    if (quiet && !config.showInTaskbar) return;
+    if (quiet && !config.showInTaskbar) {
+      if (state.maximized) win.once('show', () => win.maximize()); // maximize only once it is shown, as below
+      return;
+    }
     if (quiet) win.showInactive(); else win.show();
     setBoundsExact(bounds);
     if (state.maximized) win.maximize();
@@ -379,10 +380,22 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
-// The sign-in entry only makes sense for the installed app (a dev run would register electron.exe); Linux has no such API.
+// The sign-in entry only makes sense for the installed app (a dev run would register electron.exe). Linux has no
+// login-item API, so there it is an autostart .desktop file (src/autostart.js).
 function applyLoginItem() {
-  if (!app.isPackaged || process.platform === 'linux') return;
-  app.setLoginItemSettings({ openAtLogin: !!config.launchOnStartup });
+  if (!app.isPackaged) return;
+  if (process.platform !== 'linux') return app.setLoginItemSettings({ openAtLogin: !!config.launchOnStartup });
+  const file = autostart.entryPath(os.homedir(), process.env);
+  try {
+    if (config.launchOnStartup) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, autostart.desktopEntry(process.env.APPIMAGE || process.execPath));
+    } else if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  } catch (err) {
+    console.error('Autostart entry:', err.message);
+  }
 }
 
 function clampOpacity(v) {
@@ -726,8 +739,7 @@ function addProject(dir) {
 // The width is saved at the end of the drag (final), and sent back when the terminal's minimum width capped it.
 ipcMain.on('rail:resize', (_e, { width, final } = {}) => {
   if (!win || state.railCollapsed) return;
-  const cap = Math.max(RAIL_MIN, win.getBounds().width - MIN_WIDTH);
-  const next = Math.min(clampRail(width), cap);
+  const next = railLimits.cap(width, win.getBounds().width, MIN_WIDTH);
   state.railWidth = next;
   win.setMinimumSize(MIN_WIDTH + next, 180);
   if (final) {

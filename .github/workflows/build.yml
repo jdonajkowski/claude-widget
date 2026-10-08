@@ -20,8 +20,8 @@ jobs:
             target: --linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,8 +38,13 @@ jobs:
       # The tests use Windows paths, so they run on the Windows job only.
       - if: runner.os == 'Windows'
         run: npm test
+      # Signs the Windows installer when the repository has a code-signing certificate: add WIN_CSC_LINK (a base64
+      # .pfx, or an https URL to one) and WIN_CSC_KEY_PASSWORD as repository secrets. Without them it stays unsigned.
       - run: npx electron-builder ${{ matrix.target }} --publish never
-      - uses: actions/upload-artifact@v4
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v7
         with:
           name: installers-${{ runner.os }}
           path: |
@@ -56,7 +61,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: out
           merge-multiple: true
