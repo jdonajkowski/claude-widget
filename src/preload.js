@@ -20,7 +20,8 @@ contextBridge.exposeInMainWorld('widget', {
   },
   projects: {
     get: () => ipcRenderer.invoke('projects:get'),
-    open: (id, cols, rows) => ipcRenderer.invoke('project:open', { id, cols, rows }),
+    open: (id, cols, rows, link) => ipcRenderer.invoke('project:open', { id, cols, rows, link: !!link }),
+    onLinkTab: on('project:linkTab'),
     close: (id) => ipcRenderer.send('session:close', { id }),
     menu: (id) => ipcRenderer.send('project:menu', { id }),
     addMenu: () => ipcRenderer.send('projects:addMenu'),

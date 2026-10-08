@@ -315,7 +315,10 @@
   const zoneState = new Map(); // project id -> zones state
   const zst = () => zoneState.get(activeId) || Z.initial();
   const setZst = (st) => { if (activeId) zoneState.set(activeId, st); };
-  const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id)].filter((id) => terminals.has(id)) : []);
+  // Other projects' Claude sessions shown as tabs of a project (Open in tab): project id -> Set of project ids.
+  const linked = new Map();
+  const linkedOf = (p) => [...(linked.get(p) || [])].filter((id) => terminals.has(id));
+  const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)) : []);
   const currentLayout = () => Z.layout(zst(), tabIds());
   const shownView = () => currentLayout().focused || activeId;
   let splitRatio = 0.6;
@@ -352,27 +355,67 @@
     widget.aux.newShell(activeId); // arrives through aux:select with zone 1
   }
 
-  const tabInfo = (id) => (id === activeId ? { id, title: 'Claude', kind: 'claude', running: true } : auxList.find((a) => a.id === id));
+  function tabInfo(id) {
+    if (id === activeId) return { id, title: 'Claude', kind: 'claude', running: true };
+    const a = auxList.find((x) => x.id === id);
+    if (a) return a;
+    const p = projects.find((x) => x.id === id);
+    return { id, title: p ? p.name : id, kind: 'claude', linked: true, running: openIds.has(id) };
+  }
+
+  // Open in tab: another project's Claude session joins this project's tabs (it keeps running when removed).
+  async function linkProject(id) {
+    const p = projects.find((x) => x.id === id);
+    if (!p || !activeId || id === activeId) return;
+    if (p.missing && !terminals.has(id)) return toast(`Folder missing: ${p.path}`, 2500);
+    const host = activeId;
+    const fresh = !terminals.has(id);
+    if (fresh) terminals.create(id);
+    if (!linked.has(host)) linked.set(host, new Set());
+    linked.get(host).add(id);
+    setZst(Z.show(zst(), tabIds(), id));
+    renderTabs(true); // lays it out and fits it, so the session starts at its real size
+    const t = terminals.get(id);
+    const ok = await widget.projects.open(id, t.term.cols, t.term.rows, true);
+    if (!ok) {
+      linked.get(host).delete(id);
+      if (fresh) terminals.destroy(id);
+      renderTabs(true);
+      return toast(`Folder missing: ${p.path}`, 2500);
+    }
+    openIds.add(id);
+    update(id, { t: 'activate' });
+    renderRail();
+  }
+
+  function unlinkProject(id) {
+    if (linked.has(activeId)) linked.get(activeId).delete(id);
+    setZst(Z.normalize(zst(), tabIds()));
+    renderTabs(true);
+  }
+  widget.projects.onLinkTab(({ id }) => linkProject(id));
 
   function makeTab(t, on) {
     const el = document.createElement('div');
     el.className = `tab k-${t.kind}${on ? ' on' : ''}${t.running ? '' : ' exited'}`;
-    el.title = t.kind === 'admin' ? 'Administrator terminal' : t.kind === 'admin-claude' ? 'Claude running as administrator' : `${t.title} (drag to the other zone to split)`;
+    el.title = t.kind === 'admin' ? 'Administrator terminal' : t.kind === 'admin-claude' ? 'Claude running as administrator' : t.linked ? `${t.title}: its Claude session (drag to the other zone to split)` : `${t.title} (drag to the other zone to split)`;
     el.draggable = true;
     const label = document.createElement('span');
     label.className = 'tlabel';
     label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
     el.appendChild(label);
-    if (t.kind !== 'claude') {
+    // A linked project tab only leaves this view: its session keeps running.
+    const close = () => (t.linked ? unlinkProject(t.id) : widget.aux.close(t.id));
+    if (t.kind !== 'claude' || t.linked) {
       const x = document.createElement('button');
       x.className = 'tclose';
       x.textContent = '×';
-      x.title = 'Close';
-      x.onclick = (e) => { e.stopPropagation(); widget.aux.close(t.id); };
+      x.title = t.linked ? 'Remove from this view (the session keeps running)' : 'Close';
+      x.onclick = (e) => { e.stopPropagation(); close(); };
       el.appendChild(x);
     }
     el.onclick = () => showView(t.id);
-    el.onauxclick = (e) => { if (e.button === 1 && t.kind !== 'claude') widget.aux.close(t.id); };
+    el.onauxclick = (e) => { if (e.button === 1 && (t.kind !== 'claude' || t.linked)) close(); };
     el.ondragstart = (e) => {
       e.dataTransfer.setData('application/x-widget-tab', t.id);
       e.dataTransfer.effectAllowed = 'move';
@@ -473,7 +516,7 @@
     renderJobs();
     // A closed tab leaves its zone; a zone left empty merges back into one.
     for (const [p, st] of zoneState) {
-      const pids = [p, ...list.filter((a) => a.projectId === p).map((a) => a.id)];
+      const pids = [p, ...list.filter((a) => a.projectId === p).map((a) => a.id), ...linkedOf(p)];
       zoneState.set(p, Z.normalize(st, pids));
     }
     renderTabs();

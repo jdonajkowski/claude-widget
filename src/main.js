@@ -495,13 +495,14 @@ ipcMain.handle('projects:get', () => {
 });
 
 // Makes a project active, starting its session the first time. Returns false for a missing folder.
-ipcMain.handle('project:open', (_e, { id, cols, rows }) => {
+// link: the session only joins the current project's tabs (Open in tab), so the active project stays as it is.
+ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
   if (!sessions.has(id)) {
     const p = projectList.find((x) => x.id === id);
     if (!p || p.missing || !fs.existsSync(p.path)) return false;
     sessions.open(id, p.path, cols, rows);
   }
-  if (activeId !== id) {
+  if (!link && activeId !== id) {
     activeId = id;
     state.activeProject = id;
     writeJson(statePath, state);
@@ -586,7 +587,10 @@ ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;
   const items = [];
-  if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
+  // Its Claude session as a tab next to the current project's, which can then be moved to the lower zone.
+  if (activeId && id !== activeId) items.push({ label: 'Open in tab', enabled: !p.missing, click: () => send('project:linkTab', { id }) });
+  if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) });
+  if (items.length) items.push({ type: 'separator' });
   items.push({ label: 'Rename…', enabled: !p.missing && !p.orphan, click: () => send('project:renameAsk', { id, name: p.name, path: p.path, open: sessions.has(id) }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
