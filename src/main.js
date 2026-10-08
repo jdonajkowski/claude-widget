@@ -66,6 +66,8 @@ const DEFAULT_CONFIG = {
   showInTaskbar: false,
   // A desktop notification when Claude needs you or finishes a turn in a session you are not looking at.
   notifications: true,
+  // Reopen the projects whose sessions were open when Gremlin last quit (each continues its last conversation).
+  restoreSessions: true,
   // Start Gremlin when you sign in (installed app only); open hidden in the tray, or minimized when it is in the taskbar.
   launchOnStartup: false,
   startMinimized: false,
@@ -506,9 +508,19 @@ function initialActive() {
   return hit ? hit.id : null;
 }
 
+// Remembers which projects have a session, so the next launch can reopen them (restoreSessions).
+function saveOpen() {
+  const ids = sessions.ids();
+  if (JSON.stringify(ids) === JSON.stringify(state.openProjects)) return;
+  state.openProjects = ids;
+  writeJson(statePath, state);
+}
+
 ipcMain.handle('projects:get', () => {
   scanProjects();
-  return { list: projectList, open: sessions.ids(), active: initialActive() };
+  const usable = (id) => projectList.some((p) => p.id === id && !p.missing);
+  const restore = config.restoreSessions === false ? [] : (Array.isArray(state.openProjects) ? state.openProjects : []).filter(usable);
+  return { list: projectList, open: sessions.ids(), active: initialActive(), restore };
 });
 
 // Makes a project active, starting its session the first time. Returns false for a missing folder.
@@ -518,6 +530,7 @@ ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
     const p = projectList.find((x) => x.id === id);
     if (!p || p.missing || !fs.existsSync(p.path)) return false;
     sessions.open(id, p.path, cols, rows);
+    saveOpen();
   }
   if (!link && activeId !== id) {
     activeId = id;
@@ -533,6 +546,7 @@ ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
 function closeSession(id) {
   aux.closeProject(id);
   if (!sessions.close(id)) return;
+  saveOpen();
   send('session:closed', { id });
   scanProjects();
 }

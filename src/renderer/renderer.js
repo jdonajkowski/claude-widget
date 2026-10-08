@@ -1040,6 +1040,22 @@
     filesPane.refresh();
   });
 
+  // Starts the sessions that were open at the last quit (main.js restoreSessions), one after another, in the background.
+  // Each is a hidden terminal until its project is clicked; Claude continues its last conversation.
+  async function reopenSessions(ids, shownId) {
+    await switching; // the project being shown starts first
+    for (const id of ids) {
+      const p = projects.find((x) => x.id === id);
+      if (!p || p.missing || id === shownId || openIds.has(id) || terminals.has(id)) continue;
+      const t = terminals.create(id);
+      t.el.hidden = true;
+      const ok = await widget.projects.open(id, 120, 30, true);
+      if (!ok) { terminals.destroy(id); continue; }
+      openIds.add(id);
+      renderRail();
+    }
+  }
+
   // --- Launch: open the last active project; every other one stays idle until clicked ---
   const initial = await widget.projects.get();
   projects = initial.list;
@@ -1048,4 +1064,5 @@
   applyAux(await widget.aux.get());
   if (initial.active) activate(initial.active);
   else showPlaceholder('No projects yet. Add a folder with + in the project list.');
+  reopenSessions(initial.restore || [], initial.active);
 })();

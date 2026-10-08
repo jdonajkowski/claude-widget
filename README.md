@@ -134,6 +134,7 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `backgroundMaterial` | `"none"` | `"acrylic"`, `"mica"` or `"tabbed"` (Windows 11 22H2+) |
 | `showInTaskbar` | `false` | Needs to be `true` for taskbar progress |
 | `notifications` | `true` | Desktop notification when Claude needs you (permission prompt or question) or finishes a turn in a session you are not looking at: Gremlin in the background, or that session not on screen. Click it to open the project |
+| `restoreSessions` | `true` | At launch, also reopen the projects whose sessions were open when you quit; each continues its last conversation |
 | `launchOnStartup` | `false` | Start Gremlin at sign-in (installed app; on Linux an autostart entry) |
 | `startMinimized` | `false` | Open hidden in the tray, or minimized when `showInTaskbar` is on |
 | `hotkey` | `Control+Alt+Space` | Electron accelerator syntax |
