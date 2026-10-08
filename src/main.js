@@ -233,13 +233,10 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
-const RAIL_EXPANDED = 170; // the default; dragging the rail's right edge sets state.railWidth
-const RAIL_MIN = 120;
-const RAIL_MAX = 400;
+const railLimits = require('./rail-width'); // dragging the rail's right edge sets state.railWidth
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
-const clampRail = (w) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(Number(w)) || RAIL_EXPANDED));
-const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : clampRail(state.railWidth ?? RAIL_EXPANDED));
+const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : railLimits.clamp(state.railWidth ?? railLimits.DEFAULT));
 // Rail width when the window was maximized or went full screen, to fix the size on the way back.
 let zoomRail = null;
 
@@ -726,8 +723,7 @@ function addProject(dir) {
 // The width is saved at the end of the drag (final), and sent back when the terminal's minimum width capped it.
 ipcMain.on('rail:resize', (_e, { width, final } = {}) => {
   if (!win || state.railCollapsed) return;
-  const cap = Math.max(RAIL_MIN, win.getBounds().width - MIN_WIDTH);
-  const next = Math.min(clampRail(width), cap);
+  const next = railLimits.cap(width, win.getBounds().width, MIN_WIDTH);
   state.railWidth = next;
   win.setMinimumSize(MIN_WIDTH + next, 180);
   if (final) {

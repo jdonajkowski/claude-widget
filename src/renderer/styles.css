@@ -718,3 +718,5 @@ body.no-mascot #mascot, body.no-mascot #ledge, body.rail-collapsed #mascot, body
 #rail-resize:hover, body.rail-resizing #rail-resize { background: rgba(217, 119, 87, 0.5); }
 body.rail-collapsed #rail-resize { display: none; }
 body.rail-resizing { user-select: none; cursor: col-resize; }
+
+.tab .pdot { margin-right: 2px; }
