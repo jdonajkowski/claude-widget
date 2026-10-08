@@ -233,6 +233,7 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
+const autostart = require('./autostart');
 const railLimits = require('./rail-width'); // dragging the rail's right edge sets state.railWidth
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
@@ -322,7 +323,10 @@ function createWindow() {
   startQuiet = false;
   win.once('ready-to-show', () => {
     // In the tray (no taskbar button) it simply stays hidden; with a taskbar button it opens minimized.
-    if (quiet && !config.showInTaskbar) return;
+    if (quiet && !config.showInTaskbar) {
+      if (state.maximized) win.once('show', () => win.maximize()); // maximize only once it is shown, as below
+      return;
+    }
     if (quiet) win.showInactive(); else win.show();
     setBoundsExact(bounds);
     if (state.maximized) win.maximize();
@@ -376,10 +380,22 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
-// The sign-in entry only makes sense for the installed app (a dev run would register electron.exe); Linux has no such API.
+// The sign-in entry only makes sense for the installed app (a dev run would register electron.exe). Linux has no
+// login-item API, so there it is an autostart .desktop file (src/autostart.js).
 function applyLoginItem() {
-  if (!app.isPackaged || process.platform === 'linux') return;
-  app.setLoginItemSettings({ openAtLogin: !!config.launchOnStartup });
+  if (!app.isPackaged) return;
+  if (process.platform !== 'linux') return app.setLoginItemSettings({ openAtLogin: !!config.launchOnStartup });
+  const file = autostart.entryPath(os.homedir(), process.env);
+  try {
+    if (config.launchOnStartup) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, autostart.desktopEntry(process.env.APPIMAGE || process.execPath));
+    } else if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  } catch (err) {
+    console.error('Autostart entry:', err.message);
+  }
 }
 
 function clampOpacity(v) {

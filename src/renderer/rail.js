@@ -30,7 +30,7 @@
         row.querySelector('.pdot').className = `pdot ${dot}`;
         row.querySelector('.pname').textContent = (p.pinned ? '📌 ' : '') + (p.worktreeOf ? '⑂ ' : '') + p.name + (p.missing ? ' (missing)' : '');
         row.querySelector('.pinit').textContent = p.initials;
-        row.title = `${p.path}${p.worktreeOf ? `\nWorktree of ${p.worktreeOf}` : ''}${view.open.has(p.id) ? ` — ${DOT_TITLES[dot]}` : ''}${i < 9 ? `  (Ctrl+${i + 1})` : ''}`;
+        row.title = `${p.name}\n${p.path}${p.worktreeOf ? `\nWorktree of ${p.worktreeOf}` : ''}${view.open.has(p.id) ? ` — ${DOT_TITLES[dot]}` : ''}${i < 9 ? `  (Ctrl+${i + 1})` : ''}`;
         row.classList.toggle('active', p.id === view.active);
         row.classList.toggle('missing', !!p.missing);
         row.classList.toggle('running', view.open.has(p.id));
