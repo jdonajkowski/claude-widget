@@ -233,10 +233,13 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
-const RAIL_EXPANDED = 170;
+const RAIL_EXPANDED = 170; // the default; dragging the rail's right edge sets state.railWidth
+const RAIL_MIN = 120;
+const RAIL_MAX = 400;
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
-const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : RAIL_EXPANDED);
+const clampRail = (w) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(Number(w)) || RAIL_EXPANDED));
+const railWidth = () => (state.railCollapsed ? RAIL_COLLAPSED : clampRail(state.railWidth ?? RAIL_EXPANDED));
 // Rail width when the window was maximized or went full screen, to fix the size on the way back.
 let zoomRail = null;
 
@@ -492,13 +495,14 @@ ipcMain.handle('projects:get', () => {
 });
 
 // Makes a project active, starting its session the first time. Returns false for a missing folder.
-ipcMain.handle('project:open', (_e, { id, cols, rows }) => {
+// link: the session only joins the current project's tabs (Open in tab), so the active project stays as it is.
+ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
   if (!sessions.has(id)) {
     const p = projectList.find((x) => x.id === id);
     if (!p || p.missing || !fs.existsSync(p.path)) return false;
     sessions.open(id, p.path, cols, rows);
   }
-  if (activeId !== id) {
+  if (!link && activeId !== id) {
     activeId = id;
     state.activeProject = id;
     writeJson(statePath, state);
@@ -583,7 +587,10 @@ ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;
   const items = [];
-  if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) }, { type: 'separator' });
+  // Its Claude session as a tab next to the current project's, which can then be moved to the lower zone.
+  if (activeId && id !== activeId) items.push({ label: 'Open in tab', enabled: !p.missing, click: () => send('project:linkTab', { id }) });
+  if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) });
+  if (items.length) items.push({ type: 'separator' });
   items.push({ label: 'Rename…', enabled: !p.missing && !p.orphan, click: () => send('project:renameAsk', { id, name: p.name, path: p.path, open: sessions.has(id) }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
@@ -714,6 +721,20 @@ function addProject(dir) {
   send('projects:select', { id });
   return id;
 }
+
+// Dragging the rail's edge: the window keeps its size and the terminal takes the difference, so the edge follows the cursor.
+// The width is saved at the end of the drag (final), and sent back when the terminal's minimum width capped it.
+ipcMain.on('rail:resize', (_e, { width, final } = {}) => {
+  if (!win || state.railCollapsed) return;
+  const cap = Math.max(RAIL_MIN, win.getBounds().width - MIN_WIDTH);
+  const next = Math.min(clampRail(width), cap);
+  state.railWidth = next;
+  win.setMinimumSize(MIN_WIDTH + next, 180);
+  if (final) {
+    writeJson(statePath, state);
+    send('rail:state', { collapsed: false, width: next });
+  }
+});
 
 ipcMain.on('rail:toggle', () => {
   if (!win) return;
