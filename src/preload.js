@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('widget', {
   side: {
     setCollapsed: (collapsed) => ipcRenderer.send('side:setCollapsed', collapsed)
   },
+  notify: {
+    show: (note) => ipcRenderer.send('notify:show', note)
+  },
   rail: {
     toggle: () => ipcRenderer.send('rail:toggle'),
     resize: (width, final) => ipcRenderer.send('rail:resize', { width, final: !!final }),

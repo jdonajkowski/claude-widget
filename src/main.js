@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -64,6 +64,8 @@ const DEFAULT_CONFIG = {
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
   backgroundMaterial: 'none',
   showInTaskbar: false,
+  // A desktop notification when Claude needs you or finishes a turn in a session you are not looking at.
+  notifications: true,
   // Start Gremlin when you sign in (installed app only); open hidden in the tray, or minimized when it is in the taskbar.
   launchOnStartup: false,
   startMinimized: false,
@@ -234,6 +236,8 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
 const autostart = require('./autostart');
+// Windows files toasts under this ID (the installer's appId), so they say "Gremlin" and not "electron.app".
+if (process.platform === 'win32') app.setAppUserModelId('com.jdonajkowski.gremlin-desk');
 const railLimits = require('./rail-width'); // dragging the rail's right edge sets state.railWidth
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
@@ -1479,6 +1483,23 @@ ipcMain.on('win:progress', (_e, { state, value }) => {
   const mode = { 1: 'normal', 2: 'error', 3: 'indeterminate', 4: 'paused' }[state];
   if (!mode) return win.setProgressBar(-1);
   win.setProgressBar(state === 3 ? 2 : Math.min(100, Math.max(0, value)) / 100, { mode });
+});
+// Desktop notification from the renderer (it decides when, src/notify-rules.js); clicking one opens that project.
+const shownNotes = new Set(); // kept until closed so they are not garbage collected before the click
+ipcMain.on('notify:show', (_e, { id, title, body } = {}) => {
+  if (config.notifications === false || !Notification.isSupported()) return;
+  const n = new Notification({ title: String(title || 'Gremlin').slice(0, 120), body: String(body || '').slice(0, 300), icon: path.join(__dirname, '..', 'assets', 'icon.png') });
+  shownNotes.add(n);
+  n.on('click', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      if (typeof id === 'string' && id) send('projects:select', { id });
+    }
+  });
+  for (const ev of ['click', 'close', 'failed']) n.on(ev, () => shownNotes.delete(n));
+  n.show();
 });
 ipcMain.on('app:openConfig', () => openSettings());
 ipcMain.handle('clipboard:read', () => clipboard.readText());

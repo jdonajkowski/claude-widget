@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetTabLinks, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetTabLinks, WidgetNotify, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -32,6 +32,15 @@
   let activeId = null;
 
   const isAux = (id) => typeof id === 'string' && id.startsWith('aux:');
+
+  // A desktop notification (shown by main.js) for a session you are not looking at: Gremlin is in the background,
+  // or that session is not on screen. Whether the setting is on is checked by main.
+  function notify(id, kind, reason) {
+    const shownIds = activeId && terminals.has(activeId) ? currentLayout().front.filter(Boolean) : [];
+    if (!WidgetNotify.shouldNotify({ enabled: true, id, windowFocused: document.hasFocus(), shownIds })) return;
+    const p = projects.find((x) => x.id === id);
+    widget.notify.show({ id, ...WidgetNotify.message(kind, p && p.name, reason) });
+  }
   const update = (id, ev) => {
     if (isAux(id)) return;
     const s = sess(id);
@@ -81,6 +90,7 @@
       const ended = state === 0 && s.turnStart !== null;
       trackTurn(s, state);
       update(id, { t: 'progress', state });
+      if (ended) notify(id, 'finished');
       // Claude may have added or removed files during the turn.
       if (ended && id === activeId) filesPane.refresh();
       if (id === activeId) { renderProgress(); renderFooter(); }
@@ -864,7 +874,11 @@
     if (tools.length) s.tools = tools.reduce(MS.applyTool, s.tools);
     s.workerEvents = s.workerEvents.concat(tools.length ? events.filter((e) => !e || e.t !== 'tool') : events);
     // Permission prompts and questions (hooks/workers-hook.js) turn the row's dot to "needs you".
-    if (events.some((e) => e && e.t === 'attention')) update(id, { t: 'attention' });
+    const ask = events.find((e) => e && e.t === 'attention');
+    if (ask) {
+      update(id, { t: 'attention' });
+      notify(id, 'attention', ask.reason);
+    }
     if (id === activeId) { renderWorkers(); renderJobs(); }
     renderMascot();
   });
