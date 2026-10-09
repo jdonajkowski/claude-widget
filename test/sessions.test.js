@@ -173,3 +173,9 @@ test('sessionEnv makes Claude report turn progress: ConEmuTask on, WT_SESSION of
   assert.equal(sessionEnv({ baseEnv: {}, configEnv: { ConEmuTask: 'claude-widget' } }).ConEmuTask, 'claude-widget');
   assert.equal(sessionEnv({ baseEnv: { WT_SESSION: 'x' }, configEnv: { WT_SESSION: 'mine' } }).WT_SESSION, 'mine');
 });
+test('buildLaunch: a project\'s own flags go on the Claude command only, before --continue', () => {
+  const file = 'C:\h\s.json';
+  const l = buildLaunch({ shell: 'powershell.exe' }, { cont: true, isWin: true, settingsFile: file, extraFlags: " --model 'opus'" });
+  assert.equal(l.args[3], "claude --settings 'C:\h\s.json' --model 'opus' --continue");
+  assert.equal(buildLaunch({ shell: 'pwsh', claudeCommand: "Write-Output 'x'" }, { cont: false, isWin: true, extraFlags: " --model 'opus'" }).args[3], "Write-Output 'x'");
+});

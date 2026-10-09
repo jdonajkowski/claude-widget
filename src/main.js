@@ -100,6 +100,7 @@ const statePath = path.join(userDir, 'window-state.json');
 // Pinned extras and hidden projects for the rail, kept apart from the hand-edited config.json.
 const projectsPath = path.join(userDir, 'projects.json');
 const promptsPath = path.join(userDir, 'prompts.json');
+const defaultsPath = path.join(userDir, 'project-defaults.json');
 
 function readJson(file, fallback) {
   try {
@@ -194,6 +195,7 @@ const sessions = createSessions({
   settingsFile: writeSessionSettings,
   claudeDir,
   extraEnv: () => ({ ...claudeEnv(), ...guardEnv(), ...openEnv() }),
+  projectDefaults: (id) => { const d = loadDefaults()[id]; return { flags: projDefaults.flags(d), env: projDefaults.normalize(d).env }; },
   onStatus: (id) => { if (id === activeId) pollGit(); }
 });
 
@@ -656,6 +658,18 @@ ipcMain.handle('tab:menu', (_e, { pinned, closable, split }) => new Promise((res
   Menu.buildFromTemplate(items).popup({ window: win, callback: () => setTimeout(() => resolve(null), 50) });
 }));
 
+// Per-project session defaults (model, permission mode, env); read again at every session start.
+const projDefaults = require('./project-defaults');
+const loadDefaults = () => readJson(defaultsPath, {});
+ipcMain.handle('project:setDefaults', (_e, { id, text }) => {
+  const r = projDefaults.parseText(text);
+  if (r.error) return { error: r.error };
+  const all = loadDefaults();
+  if (projDefaults.isEmpty(r.defaults)) delete all[id]; else all[id] = r.defaults;
+  writeJson(defaultsPath, all);
+  return { ok: true };
+});
+
 ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;
@@ -665,6 +679,7 @@ ipcMain.on('project:menu', (_e, { id }) => {
   if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) });
   if (items.length) items.push({ type: 'separator' });
   items.push({ label: 'Rename…', enabled: !p.missing && !p.orphan, click: () => send('project:renameAsk', { id, name: p.name, path: p.path, open: sessions.has(id) }) });
+  items.push({ label: 'Session defaults…', click: () => send('project:defaultsAsk', { id, name: p.name, text: projDefaults.formatText(loadDefaults()[id]), open: sessions.has(id) }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
   if (!p.missing && fs.existsSync(path.join(p.path, '.git'))) {

@@ -1191,6 +1191,17 @@
       return null;
     }
   }));
+  widget.projects.onDefaultsAsk(({ id, name, text, open }) => ask({
+    title: `Session defaults for ${name}`,
+    text: `Model, permission mode and environment variables this project's Claude session starts with.${open ? ' Restart the session (↻) to apply them.' : ''} Ctrl+Enter saves.`,
+    value: text,
+    ok: 'Save',
+    area: true,
+    submit: async (value) => {
+      const r = await widget.projects.setDefaults(id, value);
+      return r && r.error ? r.error : null;
+    }
+  }));
   // Starts from the name shown, which is a 0.8.0 display name if one was set, so renaming the folder to it is one click.
   widget.projects.onRenameAsk(({ id, name, path, open }) => ask({
     title: `Rename ${name}`,

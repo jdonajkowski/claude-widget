@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('widget', {
   projects: {
     get: () => ipcRenderer.invoke('projects:get'),
     open: (id, cols, rows, link) => ipcRenderer.invoke('project:open', { id, cols, rows, link: !!link }),
+    setDefaults: (id, text) => ipcRenderer.invoke('project:setDefaults', { id, text }),
+    onDefaultsAsk: on('project:defaultsAsk'),
     onLinkTab: on('project:linkTab'),
     close: (id) => ipcRenderer.send('session:close', { id }),
     menu: (id) => ipcRenderer.send('project:menu', { id }),
