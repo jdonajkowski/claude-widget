@@ -158,4 +158,30 @@ async function load({ dirs: all, ccusage, isWin = process.platform === 'win32', 
   return { source: 'transcripts', note: 'Install Node.js for costs (ccusage). Showing tokens only.', ...local, sessions: withProject(local.sessions) };
 }
 
-module.exports = { normalizeRow, normalize, sessionProjects, scanTranscripts, load };
+// Spend per project: sessions (rows with a cwd) summed by project folder. projects: [{id, path}].
+// cost stays null when no session has one (the tokens-only fallback). Folder names compare case-insensitively with / or \.
+function byProject(sessions, projects) {
+  const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const ids = new Map(projects.map((p) => [norm(p.path), p.id]));
+  const out = {};
+  for (const row of sessions || []) {
+    const id = ids.get(norm(row.cwd));
+    if (!id) continue;
+    const cur = out[id] || { cost: null, tokens: 0, last: null };
+    if (typeof row.cost === 'number') cur.cost = (cur.cost || 0) + row.cost;
+    cur.tokens += n(row.total);
+    if (row.last && (!cur.last || row.last > cur.last)) cur.last = row.last;
+    out[id] = cur;
+  }
+  return out;
+}
+
+// "$12.40", "$0.03", or "1.2M tok" when there is no cost.
+function formatSpend(x) {
+  if (!x) return '';
+  if (typeof x.cost === 'number') return "$" + (x.cost >= 100 ? Math.round(x.cost) : x.cost.toFixed(2));
+  if (!x.tokens) return '';
+  return x.tokens >= 1e6 ? `${(x.tokens / 1e6).toFixed(1)}M tok` : `${Math.round(x.tokens / 1e3)}k tok`;
+}
+
+module.exports = { normalizeRow, normalize, sessionProjects, scanTranscripts, load, byProject, formatSpend };

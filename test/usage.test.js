@@ -34,3 +34,21 @@ test('transcripts give session projects and token totals, each message counted o
   assert.equal(r.totals.total, 232);
   assert.deepEqual(r.sessions[0].models, ['claude-x', 'claude-y']);
 });
+
+test('byProject sums sessions per project folder (case and slashes ignored); formatSpend', () => {
+  const projects = [{ id: 'a', path: 'C:\\Users\\x\\Projects\\Alpha' }, { id: 'b', path: '/home/x/beta' }];
+  const out = u.byProject([
+    { cwd: 'c:/users/x/projects/alpha/', cost: 1.25, total: 1000, last: '2026-10-01' },
+    { cwd: 'C:\\Users\\x\\Projects\\Alpha', cost: 2, total: 500, last: '2026-10-03' },
+    { cwd: '/home/x/beta', cost: null, total: 2500000, last: null },
+    { cwd: '/elsewhere', cost: 9, total: 1 }
+  ], projects);
+  assert.deepEqual(out.a, { cost: 3.25, tokens: 1500, last: '2026-10-03' });
+  assert.deepEqual(out.b, { cost: null, tokens: 2500000, last: null });
+  assert.equal(Object.keys(out).length, 2);
+  assert.equal(u.formatSpend(out.a), '$3.25');
+  assert.equal(u.formatSpend({ cost: 120.4, tokens: 1 }), '$120');
+  assert.equal(u.formatSpend(out.b), '2.5M tok');
+  assert.equal(u.formatSpend({ cost: null, tokens: 40000 }), '40k tok');
+  assert.equal(u.formatSpend(undefined), '');
+});

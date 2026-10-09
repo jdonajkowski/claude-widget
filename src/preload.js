@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('widget', {
     read: () => ipcRenderer.invoke('clipboard:read'),
     write: (text) => ipcRenderer.send('clipboard:write', text)
   },
+  usage: {
+    byProject: () => ipcRenderer.invoke('usage:projects')
+  },
   prompts: {
     get: () => ipcRenderer.invoke('prompts:get'),
     set: (list) => ipcRenderer.invoke('prompts:set', list)

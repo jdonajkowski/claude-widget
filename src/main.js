@@ -6,6 +6,7 @@ const pty = require('node-pty');
 const { createSessions } = require('./sessions');
 const projects = require('./projects');
 const gitStatus = require('./git-status');
+const usageStats = require('./usage');
 const { summarize } = require('./footer');
 const files = require('./files');
 const settingsLib = require('./settings');
@@ -516,6 +517,26 @@ function saveOpen() {
   state.openProjects = ids;
   writeJson(statePath, state);
 }
+
+// What each project has cost so far, for the switcher: one ccusage run, kept for ten minutes.
+let spendCache = null;
+let spendAt = 0;
+let spendBusy = null;
+ipcMain.handle('usage:projects', async () => {
+  if (spendCache && Date.now() - spendAt < 600000) return spendCache;
+  if (!spendBusy) {
+    spendBusy = usageStats.load({ dirs: [claudeDir()], ccusage: ccusageCommand(), isWin })
+      .then((u) => {
+        const by = usageStats.byProject(u.sessions, projectList);
+        spendCache = Object.fromEntries(Object.entries(by).map(([id, x]) => [id, usageStats.formatSpend(x)]));
+        spendAt = Date.now();
+        return spendCache;
+      })
+      .catch(() => ({}))
+      .finally(() => { spendBusy = null; });
+  }
+  return spendBusy;
+});
 
 const savedPrompts = require('./prompts');
 ipcMain.handle('prompts:get', () => savedPrompts.normalize(readJson(promptsPath, [])));

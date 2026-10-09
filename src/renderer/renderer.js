@@ -929,6 +929,7 @@
       setSideCollapsed(!sideCollapsed);
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') {
       handled();
+      if (!switcher.isOpen()) loadSpend();
       switcher.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'j') {
       handled();
@@ -988,9 +989,12 @@
   });
 
   // --- Project switcher (Ctrl+Shift+P): type to filter, Enter opens, Ctrl+Enter opens it as a tab ---
+  // Spend per project (ccusage, cached in main): fetched when the switcher opens, shown once it arrives.
+  let spend = {};
+  const loadSpend = () => widget.usage.byProject().then((x) => { spend = x || {}; switcher.refresh(); });
   const switcher = WidgetSwitcher.createSwitcher({
     el: $('switcher'),
-    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state), git: WidgetGitBadge.badge(gitAll[p.id]).long })),
+    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state), git: [WidgetGitBadge.badge(gitAll[p.id]).long, spend[p.id]].filter(Boolean).join('  ') })),
     pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
     canTab: (id) => !!activeId && id !== activeId,
     onClose: () => terminals.focus()

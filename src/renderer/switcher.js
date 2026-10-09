@@ -88,7 +88,7 @@
     // Clicking outside the box closes it.
     el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
 
-    return { open, close, toggle: () => (el.hidden ? open() : close()), isOpen: () => !el.hidden };
+    return { open, close, toggle: () => (el.hidden ? open() : close()), isOpen: () => !el.hidden, refresh: () => { if (!el.hidden) render(); } };
   }
 
   root.WidgetSwitcher = { createSwitcher };
