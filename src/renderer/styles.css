@@ -743,3 +743,10 @@ body.rail-resizing { user-select: none; cursor: col-resize; }
 .sw-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; text-align: right; direction: rtl; }
 .sw-none { padding: 8px; color: var(--muted); }
 #sw-hint { margin-top: 6px; padding: 0 2px; color: var(--muted); font-size: 11px; }
+
+.term-search { position: absolute; top: 6px; right: 18px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 4px 6px; background: var(--bg); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.term-search[hidden] { display: none; }
+.term-search input { width: 180px; background: transparent; border: 0; outline: 0; color: inherit; font: inherit; font-size: 12px; }
+.term-search .ts-count { font-size: 11px; opacity: .7; min-width: 34px; text-align: right; }
+.term-search button { background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0 4px; font-size: 13px; opacity: .8; }
+.term-search button:hover { opacity: 1; }

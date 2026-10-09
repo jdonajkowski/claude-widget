@@ -1,4 +1,4 @@
-/* global Terminal, FitAddon, WebLinksAddon, WidgetMdLinks */
+/* global Terminal, FitAddon, WebLinksAddon, SearchAddon, WidgetMdLinks */
 // One xterm per session, each in its own <div> inside a zone's host (#terminal, or #terminal-b in split view).
 // Hidden terminals keep receiving output, so switching back shows complete scrollback. Loaded as a plain script (window.WidgetTerminals).
 (function (root) {
@@ -36,8 +36,11 @@
       const fit = new FitAddon.FitAddon();
       term.loadAddon(fit);
       term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => widget.openExternal(url)));
+      const search = new SearchAddon.SearchAddon();
+      term.loadAddon(search);
       term.open(el);
-      const t = { id, el, term, fit, exited: false };
+      const t = { id, el, term, fit, exited: false, bar: null };
+      const decorations = { matchOverviewRuler: '#d6a642', activeMatchColorOverviewRuler: '#ffb454', matchBackground: '#5a4a1a', activeMatchBackground: '#a87a12' };
       // Clicking into a terminal of the other zone makes it the active one (keys, Ctrl+PageUp/Down).
       el.addEventListener('focusin', () => { if (activeId !== id) { activeId = id; onFocus(id); } });
       terms.set(id, t);
@@ -121,6 +124,11 @@
           widget.win.toggleFullScreen();
           return false;
         }
+        // Ctrl+Alt+F searches the scrollback (Ctrl+F belongs to Claude Code, Ctrl+Shift+F to the file search).
+        if (e.ctrlKey && e.altKey && !e.shiftKey && key === 'f') {
+          openSearch(t, search, decorations);
+          return false;
+        }
         if (e.ctrlKey && e.shiftKey && key === 'r') {
           restart(id);
           return false;
@@ -149,6 +157,44 @@
         }
       });
       return t;
+    }
+
+    // A small bar over the top right of the pane: type to find, Enter / Shift+Enter next / previous, Esc closes.
+    function openSearch(t, search, decorations) {
+      if (!t.bar) {
+        const bar = document.createElement('div');
+        bar.className = 'term-search';
+        bar.innerHTML = '<input type="text" placeholder="Find in output" spellcheck="false"><span class="ts-count"></span><button type="button" title="Previous (Shift+Enter)">↑</button><button type="button" title="Next (Enter)">↓</button><button type="button" title="Close (Esc)">×</button>';
+        const input = bar.querySelector('input');
+        const count = bar.querySelector('.ts-count');
+        const [prev, next, close] = bar.querySelectorAll('button');
+        const opts = () => ({ decorations, caseSensitive: false });
+        const find = (back) => {
+          if (!input.value) { search.clearDecorations(); count.textContent = ''; return; }
+          if (back) search.findPrevious(input.value, opts()); else search.findNext(input.value, opts());
+        };
+        search.onDidChangeResults(({ resultIndex, resultCount }) => {
+          count.textContent = !input.value ? '' : resultCount ? `${resultIndex + 1}/${resultCount}` : 'none';
+        });
+        const shut = () => { bar.hidden = true; search.clearDecorations(); t.term.focus(); };
+        input.addEventListener('input', () => find(false));
+        input.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') { e.preventDefault(); shut(); }
+          else if (e.key === 'Enter') { e.preventDefault(); find(e.shiftKey); }
+        });
+        prev.onclick = () => find(true);
+        next.onclick = () => find(false);
+        close.onclick = shut;
+        t.el.appendChild(bar);
+        t.bar = bar;
+      }
+      t.bar.hidden = false;
+      const input = t.bar.querySelector('input');
+      const sel = t.term.hasSelection() ? t.term.getSelection().split('\n')[0] : '';
+      if (sel) input.value = sel;
+      input.focus();
+      input.select();
     }
 
     // Fitting happens after showing: xterm measures 0x0 while hidden.
