@@ -1140,6 +1140,20 @@ ipcMain.handle('files:search', async (_e, { id, query, regex, caseSensitive }) =
   const r = await searchProject(root, query, { regex, caseSensitive, isCancelled: () => seq !== searchSeq });
   return r && { ...r, root };
 });
+// Ctrl+Shift+H: file contents in every project at once, a few hits from each so a common word does not drown the rest.
+let searchAllSeq = 0;
+ipcMain.handle('files:searchAll', async (_e, { query }) => {
+  const seq = ++searchAllSeq;
+  const rows = [];
+  for (const p of projectList) {
+    if (p.missing || seq !== searchAllSeq) continue;
+    const r = await searchProject(p.path, query, { maxHits: 12, maxFiles: 8000, isCancelled: () => seq !== searchAllSeq });
+    if (!r) return null; // a newer search took over
+    for (const f of r.files.slice(0, 5)) rows.push({ id: p.id, project: p.name, rel: f.rel, line: 0, text: '' });
+    for (const hit of r.hits) for (const m of hit.matches.slice(0, 3)) rows.push({ id: p.id, project: p.name, rel: hit.rel, line: m.line, text: m.text });
+  }
+  return rows.slice(0, 200);
+});
 ipcMain.handle('files:git', async (_e, { id }) => {
   const root = projectPath(id);
   if (!root) return null;

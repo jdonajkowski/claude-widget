@@ -988,6 +988,10 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'l') {
       handled();
       if (sendTo.isOpen()) sendTo.close(); else openSendTo();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'h') {
+      handled();
+      if (!findAll.isOpen()) findRows = [];
+      findAll.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -1048,6 +1052,31 @@
     pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
     canTab: (id) => !!activeId && id !== activeId,
     onClose: () => terminals.focus()
+  });
+
+  // --- Search every project (Ctrl+Shift+H): file names and contents, results from the main process as you type ---
+  let findRows = [];
+  let findTimer = null;
+  const findAll = WidgetSwitcher.createSwitcher({
+    el: $('findall'),
+    emptyText: 'Type to search (two or more characters)',
+    items: () => findRows.map((r, i) => ({ id: String(i), name: r.project + '  ' + r.rel + (r.line ? ':' + r.line : ''), path: r.text || (r.line ? '' : 'file name'), plain: true })),
+    canTab: () => false,
+    pick: (id) => {
+      const r = findRows[Number(id)];
+      if (!r) return;
+      if (r.line) widget.files.openAt(r.id, r.rel, r.line); else widget.files.open(r.id, r.rel);
+    },
+    onInput: (q) => {
+      clearTimeout(findTimer);
+      findRows = [];
+      if (q.trim().length < 2) return findAll.refresh();
+      findTimer = setTimeout(async () => {
+        const rows = await widget.files.searchAll(q.trim());
+        if (rows && findAll.isOpen()) { findRows = rows; findAll.refresh(); }
+      }, 250);
+    },
+    onClose: () => { clearTimeout(findTimer); terminals.focus(); }
   });
 
   // --- Send to another session (Ctrl+Shift+L): the selected text (else the clipboard) goes into that session's prompt ---

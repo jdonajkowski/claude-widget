@@ -5,7 +5,7 @@
   const MAX_ROWS = 50;
 
   // items(): [{id, name, path, open, active, dot}]; pick(id, {inTab}); canTab(id): may it open as a tab?
-  function createSwitcher({ el, items, pick, canTab = () => false, onClose, onKey = () => false, emptyText = 'No project matches' }) {
+  function createSwitcher({ el, items, pick, canTab = () => false, onClose, onKey = () => false, onInput = null, emptyText = 'No project matches' }) {
     const input = el.querySelector('.sw-input');
     const listEl = el.querySelector('.sw-list');
     let shown = [];
@@ -18,7 +18,8 @@
       const urgency = (p) => (p.dot === 'attention' ? 0 : p.dot === 'finished' ? 1 : 2);
       const open = all.filter((p) => p.open).map((p, i) => ({ p, i })).sort((a, b) => urgency(a.p) - urgency(b.p) || a.i - b.i).map((x) => x.p);
       const base = query.trim() ? all : [...open, ...all.filter((p) => !p.open)];
-      shown = root.WidgetFuzzy.rank(query, base).slice(0, MAX_ROWS);
+      // onInput: the owner searches by itself (items() already is the result), so nothing is filtered here.
+      shown = (onInput ? base : root.WidgetFuzzy.rank(query, base)).slice(0, MAX_ROWS);
       sel = Math.min(sel, Math.max(0, shown.length - 1));
       listEl.replaceChildren(...shown.map((p, i) => {
         const row = document.createElement('div');
@@ -72,7 +73,7 @@
       onClose();
     }
 
-    input.addEventListener('input', () => { sel = 0; render(); });
+    input.addEventListener('input', () => { sel = 0; if (onInput) onInput(input.value); render(); });
     input.addEventListener('keydown', (e) => {
       if (onKey(e, shown[sel], { refresh: () => render(), close })) { e.preventDefault(); e.stopPropagation(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }

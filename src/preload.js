@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('widget', {
     list: (id, rel) => ipcRenderer.invoke('files:list', { id, rel }),
     open: (id, rel) => ipcRenderer.send('files:open', { id, rel }),
     menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir }),
+    searchAll: (query) => ipcRenderer.invoke('files:searchAll', { query }),
     search: (id, query, opts) => ipcRenderer.invoke('files:search', { id, query, ...opts }),
     git: (id) => ipcRenderer.invoke('files:git', { id }),
     openAt: (id, rel, line) => ipcRenderer.send('files:openAt', { id, rel, line })
