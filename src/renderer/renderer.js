@@ -992,6 +992,9 @@
       handled();
       if (!findAll.isOpen()) findRows = [];
       findAll.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'o') {
+      handled();
+      layoutsPalette.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -1051,6 +1054,64 @@
     items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state), git: [WidgetGitBadge.badge(gitAll[p.id]).long, spend[p.id]].filter(Boolean).join('  ') })),
     pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
     canTab: (id) => !!activeId && id !== activeId,
+    onClose: () => terminals.focus()
+  });
+
+  // --- Saved layouts (Ctrl+Shift+O): a project with other projects' sessions as tabs, some in the lower zone ---
+  let layouts = [];
+  try { layouts = WidgetLayouts.normalize(JSON.parse(localStorage.getItem('layouts'))); } catch { /* none saved */ }
+  const saveLayouts = (next) => {
+    layouts = next;
+    try { localStorage.setItem('layouts', JSON.stringify(layouts)); } catch { /* storage off */ }
+  };
+  const projectName = (id) => (projects.find((p) => p.id === id) || {}).name;
+  const projectExists = (id) => projects.some((p) => p.id === id && !p.missing);
+
+  async function applyLayout(l) {
+    const use = WidgetLayouts.usable(l, projectExists);
+    if (!use) return toast('Some of those projects are gone');
+    await activate(use.host);
+    if (activeId !== use.host) return;
+    for (const id of linkedOf(use.host).slice()) if (!use.links.includes(id)) unlinkProject(id);
+    for (const id of use.links) await linkProject(id, { quiet: true });
+    splitRatio = use.ratio;
+    try { localStorage.setItem('splitRatio', String(splitRatio)); } catch { /* storage off */ }
+    for (const id of use.links) {
+      if (!tabIds().includes(id)) continue;
+      const down = currentLayout().zones[1].includes(id);
+      if (use.bottom.includes(id) !== down) moveTab(id, down ? 0 : 1);
+    }
+    renderTabs(true);
+    toast(`Layout: ${use.name}`);
+  }
+
+  function saveCurrentLayout() {
+    const links = activeId ? linkedOf(activeId) : [];
+    if (!links.length) return toast('Open another project in a tab first (right-click it > Open in tab)');
+    ask({
+      title: 'Save layout',
+      text: `${WidgetLayouts.describe({ host: activeId, links, bottom: links.filter((id) => currentLayout().zones[1].includes(id)) }, projectName)}. Saving with an existing name replaces it.`,
+      value: '',
+      ok: 'Save',
+      submit: async (name) => {
+        if (!name.trim()) return 'Give the layout a name';
+        const bottom = links.filter((id) => currentLayout().zones[1].includes(id));
+        saveLayouts(WidgetLayouts.add(layouts, { name, host: activeId, links, bottom, ratio: splitRatio }));
+        return null;
+      }
+    });
+  }
+
+  const layoutsPalette = WidgetSwitcher.createSwitcher({
+    el: $('layouts'),
+    emptyText: 'No saved layouts. Ctrl+N saves the current tabs as one.',
+    items: () => layouts.map((l) => ({ id: l.id, name: l.name, path: WidgetLayouts.describe(l, projectName), plain: true })),
+    pick: (id) => { const l = layouts.find((x) => x.id === id); if (l) applyLayout(l); },
+    onKey: (e, item, api) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') { api.close(); saveCurrentLayout(); return true; }
+      if (e.ctrlKey && e.key === 'Delete' && item) { saveLayouts(WidgetLayouts.remove(layouts, item.id)); api.refresh(); return true; }
+      return false;
+    },
     onClose: () => terminals.focus()
   });
 

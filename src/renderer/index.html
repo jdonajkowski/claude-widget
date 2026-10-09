@@ -135,6 +135,13 @@
         <div class="modal-buttons"><button type="button" id="modal-cancel">Cancel</button><button type="submit" id="modal-ok">OK</button></div>
       </form>
     </div>
+    <div id="layouts" class="picker" hidden>
+      <div class="sw-box">
+        <input class="sw-input" placeholder="Saved layouts…" spellcheck="false" autocomplete="off">
+        <div class="sw-list"></div>
+        <div class="sw-hint">Enter: apply · Ctrl+N: save the current tabs as a layout · Ctrl+Delete: remove</div>
+      </div>
+    </div>
     <div id="findall" class="picker" hidden>
       <div class="sw-box">
         <input class="sw-input" placeholder="Search file names and contents in every project…" spellcheck="false" autocomplete="off">
@@ -182,6 +189,7 @@
   <script src="../attention.js"></script>
   <script src="../git-badge.js"></script>
   <script src="../tab-prefs.js"></script>
+  <script src="../layouts.js"></script>
   <script src="../prompts.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>
