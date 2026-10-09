@@ -93,6 +93,8 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 | Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
 | Go to a project (type to filter; `Enter` opens it, `Ctrl+Enter` opens it as a tab) | `Ctrl+Shift+P` |
+| Jump to the next session that needs you (waiting for an answer, then finished) | `Ctrl+Shift+J` |
+| Search the terminal output (`Enter` / `Shift+Enter` next / previous, `Esc` closes) | `Ctrl+Alt+F` |
 | Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
 | Search the project | `Ctrl+Shift+F` (`Esc` clears) |
 | Open the Workbench | `Ctrl+Shift+G`, or the title-bar grid button |

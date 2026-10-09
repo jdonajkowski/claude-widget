@@ -13,8 +13,10 @@
     function render() {
       const all = items();
       const query = input.value;
-      // With nothing typed: the open projects first, in the order of the sidebar.
-      const base = query.trim() ? all : [...all.filter((p) => p.open), ...all.filter((p) => !p.open)];
+      // With nothing typed: the open projects first (the ones waiting for you on top), then the rest, in sidebar order.
+      const urgency = (p) => (p.dot === 'attention' ? 0 : p.dot === 'finished' ? 1 : 2);
+      const open = all.filter((p) => p.open).map((p, i) => ({ p, i })).sort((a, b) => urgency(a.p) - urgency(b.p) || a.i - b.i).map((x) => x.p);
+      const base = query.trim() ? all : [...open, ...all.filter((p) => !p.open)];
       shown = root.WidgetFuzzy.rank(query, base).slice(0, MAX_ROWS);
       sel = Math.min(sel, Math.max(0, shown.length - 1));
       listEl.replaceChildren(...shown.map((p, i) => {

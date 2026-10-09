@@ -926,6 +926,10 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') {
       handled();
       switcher.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'j') {
+      handled();
+      const id = WidgetAttention.next(projects.filter((p) => openIds.has(p.id)), (x) => SS.dot(sess(x).state), activeId);
+      if (id) activate(id); else toast('Nothing is waiting for you');
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
