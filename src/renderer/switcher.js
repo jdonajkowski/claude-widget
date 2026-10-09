@@ -31,9 +31,17 @@
         name.textContent = p.name;
         const path = document.createElement('span');
         path.className = p.plain ? 'sw-path plain' : 'sw-path';
-        path.textContent = p.plain ? p.path : [p.git, p.active ? 'current project' : p.path].filter(Boolean).join('   ');
+        path.textContent = p.plain ? p.path : (p.active ? 'current project' : p.path);
         if (p.dot !== undefined) row.append(dot);
-        row.append(name, path);
+        row.append(name);
+        // Git state and spend get their own left-to-right span: the path is right-to-left so its end stays visible.
+        if (p.git) {
+          const meta = document.createElement('span');
+          meta.className = 'sw-meta';
+          meta.textContent = p.git;
+          row.append(meta);
+        }
+        row.append(path);
         row.onmousedown = (e) => { e.preventDefault(); choose(i, e.ctrlKey || e.shiftKey); };
         row.onmousemove = () => { if (sel !== i) { sel = i; mark(); } };
         return row;

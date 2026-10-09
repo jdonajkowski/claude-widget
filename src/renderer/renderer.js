@@ -353,7 +353,7 @@
   let tabPrefs = (() => { try { return TP.parse(localStorage.getItem('tabPrefs')); } catch { return TP.empty(); } })();
   function saveTabPrefs(next) {
     tabPrefs = TP.prune(next, [...auxList.map((a) => a.id), ...projects.map((p) => p.id)]);
-    try { localStorage.setItem('tabPrefs', JSON.stringify(tabPrefs)); } catch { /* storage off */ }
+    try { localStorage.setItem('tabPrefs', JSON.stringify(TP.forStorage(tabPrefs))); } catch { /* storage off */ }
     renderTabs();
   }
   const tabIds = () => (activeId ? TP.arrange([activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)), tabPrefs) : []);
@@ -1169,7 +1169,7 @@
   let savedPrompts = [];
   widget.prompts.get().then((list) => { savedPrompts = list; });
   const savePrompts = async (list) => { savedPrompts = await widget.prompts.set(list); };
-  const promptTarget = () => { const L = currentLayout(); return L.focused && terminals.has(L.focused) ? L.focused : null; };
+  const promptTarget = () => { const L = currentLayout(); return L.focused && !L.focused.startsWith('aux:') && terminals.has(L.focused) ? L.focused : null; }; // Claude sessions only: a shell would run the text
   const promptsPalette = WidgetSwitcher.createSwitcher({
     el: $('prompts'),
     emptyText: 'No saved prompts. Ctrl+N makes one.',
@@ -1178,7 +1178,7 @@
     pick: (id, { inTab }) => {
       const p = savedPrompts.find((x) => x.id === id);
       const target = promptTarget();
-      if (!p || !target) return toast('Open a session first');
+      if (!p || !target) return toast('Focus a Claude session first');
       widget.pty.write(target, `\x1b[200~${p.text}\x1b[201~${inTab ? '\r' : ''}`);
     },
     onKey: (e, item, api) => {

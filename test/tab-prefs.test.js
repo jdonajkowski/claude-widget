@@ -34,3 +34,11 @@ test('prune drops tabs that are gone; parse survives bad input', () => {
   assert.deepEqual(P.parse('not json'), P.empty());
   assert.deepEqual(P.parse('{"order":5,"names":{"a":3}}'), P.empty());
 });
+
+test('terminal tabs (aux:N) are not kept between runs: ids restart at aux:1 every launch', () => {
+  const saved = JSON.stringify(P.forStorage({ order: ['aux:2', 'proj-a'], pinned: ['aux:1', 'proj-a'], names: { 'aux:2': 'build', 'proj-a': 'Alpha' } }));
+  assert.deepEqual(JSON.parse(saved), { order: ['proj-a'], pinned: ['proj-a'], names: { 'proj-a': 'Alpha' } });
+  // An old value that already holds terminal ids is cleaned on load too.
+  const loaded = P.parse('{"order":["aux:1","p"],"pinned":["aux:1"],"names":{"aux:1":"build","p":"P"}}');
+  assert.deepEqual(loaded, { order: ['p'], pinned: [], names: { p: 'P' } });
+});

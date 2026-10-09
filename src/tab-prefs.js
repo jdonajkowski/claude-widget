@@ -5,17 +5,25 @@
 (function (root) {
   const empty = () => ({ order: [], pinned: [], names: {} });
 
+  // Terminal tabs are numbered again in every run (aux:1, aux:2...), so their names and pins are not kept between runs.
+  const temporary = (id) => /^aux:/.test(id);
+
   function parse(text) {
     let v;
     try { v = JSON.parse(text); } catch { return empty(); }
     if (!v || typeof v !== 'object') return empty();
     const names = {};
     for (const [k, n] of Object.entries(v.names && typeof v.names === 'object' ? v.names : {})) if (typeof n === 'string' && n.trim()) names[k] = n.slice(0, 40);
-    return {
-      order: Array.isArray(v.order) ? v.order.filter((x) => typeof x === 'string') : [],
-      pinned: Array.isArray(v.pinned) ? v.pinned.filter((x) => typeof x === 'string') : [],
-      names
-    };
+    const ids = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && !temporary(x)) : []);
+    for (const k of Object.keys(names)) if (temporary(k)) delete names[k];
+    return { order: ids(v.order), pinned: ids(v.pinned), names };
+  }
+
+  // What is written to storage: everything except the terminal tabs of this run.
+  function forStorage(prefs) {
+    const names = {};
+    for (const [k, n] of Object.entries(prefs.names)) if (!temporary(k)) names[k] = n;
+    return { order: prefs.order.filter((x) => !temporary(x)), pinned: prefs.pinned.filter((x) => !temporary(x)), names };
   }
 
   // ids in their natural order (Claude session first) -> display order.
@@ -60,7 +68,7 @@
     return { order: prefs.order.filter((x) => live.has(x)), pinned: prefs.pinned.filter((x) => live.has(x)), names };
   }
 
-  const api = { empty, parse, arrange, move, togglePin, rename, nameOf, isPinned, prune };
+  const api = { empty, parse, forStorage, arrange, move, togglePin, rename, nameOf, isPinned, prune };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.WidgetTabPrefs = api;
 })(this);

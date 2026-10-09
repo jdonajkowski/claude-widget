@@ -758,3 +758,5 @@ body.rail-collapsed .proj .pgit { display: none; }
 #modal-area[hidden], #modal-input[hidden] { display: none; }
 .sw-path.plain { direction: ltr; text-align: left; }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.sw-meta { flex: none; direction: ltr; unicode-bidi: isolate; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.sw-path { unicode-bidi: plaintext; }
