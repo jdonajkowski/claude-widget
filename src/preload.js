@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('widget', {
   projects: {
     get: () => ipcRenderer.invoke('projects:get'),
     open: (id, cols, rows, link) => ipcRenderer.invoke('project:open', { id, cols, rows, link: !!link }),
+    setDefaults: (id, text) => ipcRenderer.invoke('project:setDefaults', { id, text }),
+    onDefaultsAsk: on('project:defaultsAsk'),
     onLinkTab: on('project:linkTab'),
     close: (id) => ipcRenderer.send('session:close', { id }),
     menu: (id) => ipcRenderer.send('project:menu', { id }),
@@ -56,6 +58,9 @@ contextBridge.exposeInMainWorld('widget', {
   side: {
     setCollapsed: (collapsed) => ipcRenderer.send('side:setCollapsed', collapsed)
   },
+  notify: {
+    show: (note) => ipcRenderer.send('notify:show', note)
+  },
   rail: {
     toggle: () => ipcRenderer.send('rail:toggle'),
     resize: (width, final) => ipcRenderer.send('rail:resize', { width, final: !!final }),
@@ -76,12 +81,24 @@ contextBridge.exposeInMainWorld('widget', {
     read: () => ipcRenderer.invoke('clipboard:read'),
     write: (text) => ipcRenderer.send('clipboard:write', text)
   },
+  usage: {
+    byProject: () => ipcRenderer.invoke('usage:projects')
+  },
+  tabs: {
+    menu: (opts) => ipcRenderer.invoke('tab:menu', opts)
+  },
+  prompts: {
+    get: () => ipcRenderer.invoke('prompts:get'),
+    set: (list) => ipcRenderer.invoke('prompts:set', list)
+  },
   workers: {
     onEvents: on('workers:events')
   },
   status: {
     onUpdate: on('status:update'),
-    onGit: on('git:update')
+    onGit: on('git:update'),
+    onGitAll: on('git:all'),
+    gitAll: () => ipcRenderer.invoke('git:all')
   },
   md: {
     resolve: (candidates, id) => ipcRenderer.invoke('md:resolve', { candidates, id }),
@@ -92,6 +109,7 @@ contextBridge.exposeInMainWorld('widget', {
     list: (id, rel) => ipcRenderer.invoke('files:list', { id, rel }),
     open: (id, rel) => ipcRenderer.send('files:open', { id, rel }),
     menu: (id, rel, dir) => ipcRenderer.send('files:menu', { id, rel, dir }),
+    searchAll: (query) => ipcRenderer.invoke('files:searchAll', { query }),
     search: (id, query, opts) => ipcRenderer.invoke('files:search', { id, query, ...opts }),
     git: (id) => ipcRenderer.invoke('files:git', { id }),
     openAt: (id, rel, line) => ipcRenderer.send('files:openAt', { id, rel, line })

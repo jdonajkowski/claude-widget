@@ -1,4 +1,4 @@
-/* global WidgetZones, WidgetTabLinks, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
+/* global WidgetZones, WidgetTabLinks, WidgetNotify, WidgetSwitcher, WidgetWorkers, WidgetFooter, WidgetSessionState, WidgetMascotState, WidgetGuardRoutine, WidgetGuardActor, GuardPoses, WidgetTerminals, WidgetRail, WidgetFilesPane */
 (async () => {
   const { widget } = window;
   const cfg = await widget.getConfig();
@@ -32,6 +32,15 @@
   let activeId = null;
 
   const isAux = (id) => typeof id === 'string' && id.startsWith('aux:');
+
+  // A desktop notification (shown by main.js) for a session you are not looking at: Gremlin is in the background,
+  // or that session is not on screen. Whether the setting is on is checked by main.
+  function notify(id, kind, reason) {
+    const shownIds = activeId && terminals.has(activeId) ? currentLayout().front.filter(Boolean) : [];
+    if (!WidgetNotify.shouldNotify({ enabled: true, id, windowFocused: document.hasFocus(), shownIds })) return;
+    const p = projects.find((x) => x.id === id);
+    widget.notify.show({ id, ...WidgetNotify.message(kind, p && p.name, reason) });
+  }
   const update = (id, ev) => {
     if (isAux(id)) return;
     const s = sess(id);
@@ -81,6 +90,7 @@
       const ended = state === 0 && s.turnStart !== null;
       trackTurn(s, state);
       update(id, { t: 'progress', state });
+      if (ended) notify(id, 'finished');
       // Claude may have added or removed files during the turn.
       if (ended && id === activeId) filesPane.refresh();
       if (id === activeId) { renderProgress(); renderFooter(); }
@@ -243,8 +253,12 @@
   $('btn-admin').onclick = () => widget.menus.admin();
   $('btn-workbench').onclick = () => widget.workbench.open();
 
+  let gitAll = {}; // every project's git state, from main (polled)
+  widget.status.onGitAll((all) => { gitAll = all || {}; renderRail(); });
+  widget.status.gitAll().then((all) => { gitAll = all || {}; renderRail(); });
+
   function renderRail() {
-    rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state) });
+    rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state), git: (id) => WidgetGitBadge.badge(gitAll[id]) });
   }
 
   widget.projects.onList(({ list, open }) => {
@@ -334,7 +348,15 @@
     }
     try { localStorage.setItem('tabLinks', TL.stringify(tabLinks, bottom)); } catch { /* storage off */ }
   }
-  const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)) : []);
+  // Your own tab order, pins and names (Right-click a tab; drag a tab onto another to reorder).
+  const TP = WidgetTabPrefs;
+  let tabPrefs = (() => { try { return TP.parse(localStorage.getItem('tabPrefs')); } catch { return TP.empty(); } })();
+  function saveTabPrefs(next) {
+    tabPrefs = TP.prune(next, [...auxList.map((a) => a.id), ...projects.map((p) => p.id)]);
+    try { localStorage.setItem('tabPrefs', JSON.stringify(TP.forStorage(tabPrefs))); } catch { /* storage off */ }
+    renderTabs();
+  }
+  const tabIds = () => (activeId ? TP.arrange([activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)), tabPrefs) : []);
   const currentLayout = () => Z.layout(zst(), tabIds());
   const shownView = () => currentLayout().focused || activeId;
   let splitRatio = 0.6;
@@ -432,7 +454,7 @@
     el.draggable = true;
     const label = document.createElement('span');
     label.className = 'tlabel';
-    label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
+    label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + (TP.isPinned(tabPrefs, t.id) ? '▪ ' : '') + TP.nameOf(tabPrefs, t.id, t.title);
     // A project's Claude session (the first tab, or one opened in a tab) shows its state like the sidebar does.
     if (t.kind === 'claude') {
       const dot = document.createElement('span');
@@ -442,7 +464,8 @@
     el.appendChild(label);
     // A linked project tab only leaves this view: its session keeps running.
     const close = () => (t.linked ? unlinkProject(t.id) : widget.aux.close(t.id));
-    if (t.kind !== 'claude' || t.linked) {
+    const closable = (t.kind !== 'claude' || t.linked) && !TP.isPinned(tabPrefs, t.id); // a pinned tab has to be unpinned first
+    if (closable) {
       const x = document.createElement('button');
       x.className = 'tclose';
       x.textContent = '×';
@@ -451,7 +474,45 @@
       el.appendChild(x);
     }
     el.onclick = () => showView(t.id);
-    el.onauxclick = (e) => { if (e.button === 1 && (t.kind !== 'claude' || t.linked)) close(); };
+    el.onauxclick = (e) => { if (e.button === 1 && closable) close(); };
+    const rename = () => ask({
+      title: 'Rename tab',
+      text: 'Only changes the name shown on the tab. Leave it empty to go back to the original.',
+      value: TP.nameOf(tabPrefs, t.id, ''),
+      ok: 'Rename',
+      submit: async (name) => { saveTabPrefs(TP.rename(tabPrefs, t.id, name)); return null; }
+    });
+    el.ondblclick = rename;
+    el.oncontextmenu = async (e) => {
+      e.preventDefault();
+      const L = currentLayout();
+      const action = await widget.tabs.menu({ pinned: TP.isPinned(tabPrefs, t.id), closable: t.kind !== 'claude' || t.linked, split: L.split });
+      if (action === 'rename') rename();
+      else if (action === 'pin') saveTabPrefs(TP.togglePin(tabPrefs, t.id));
+      else if (action === 'close') close();
+      else if (action === 'move' && t.id !== tabIds()[0]) moveTab(t.id, L.split ? 1 - (L.zones[1].includes(t.id) ? 1 : 0) : 1);
+    };
+    // Dropping another tab on this one puts it just before this one (moving it into this zone first if needed).
+    el.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('application/x-widget-tab')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.add('drop-before');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-before'));
+    el.addEventListener('drop', (e) => {
+      const id = e.dataTransfer.getData('application/x-widget-tab');
+      el.classList.remove('drop-before');
+      document.body.classList.remove('dragging-tab');
+      dropEl.hidden = true;
+      if (!id || id === t.id || t.id === tabIds()[0]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const L = currentLayout();
+      const zoneOfTarget = L.zones[1].includes(t.id) ? 1 : 0;
+      if (L.split && !L.zones[zoneOfTarget].includes(id)) moveTab(id, zoneOfTarget);
+      saveTabPrefs(TP.move(tabPrefs, tabIds(), id, t.id));
+    });
     el.ondragstart = (e) => {
       e.dataTransfer.setData('application/x-widget-tab', t.id);
       e.dataTransfer.effectAllowed = 'move';
@@ -864,7 +925,11 @@
     if (tools.length) s.tools = tools.reduce(MS.applyTool, s.tools);
     s.workerEvents = s.workerEvents.concat(tools.length ? events.filter((e) => !e || e.t !== 'tool') : events);
     // Permission prompts and questions (hooks/workers-hook.js) turn the row's dot to "needs you".
-    if (events.some((e) => e && e.t === 'attention')) update(id, { t: 'attention' });
+    const ask = events.find((e) => e && e.t === 'attention');
+    if (ask) {
+      update(id, { t: 'attention' });
+      notify(id, 'attention', ask.reason);
+    }
     if (id === activeId) { renderWorkers(); renderJobs(); }
     renderMascot();
   });
@@ -909,6 +974,27 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'w') {
       handled();
       setSideCollapsed(!sideCollapsed);
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+      handled();
+      if (!switcher.isOpen()) loadSpend();
+      switcher.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'j') {
+      handled();
+      const id = WidgetAttention.next(projects.filter((p) => openIds.has(p.id)), (x) => SS.dot(sess(x).state), activeId);
+      if (id) activate(id); else toast('Nothing is waiting for you');
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'k') {
+      handled();
+      promptsPalette.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+      handled();
+      if (sendTo.isOpen()) sendTo.close(); else openSendTo();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'h') {
+      handled();
+      if (!findAll.isOpen()) findRows = [];
+      findAll.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'o') {
+      handled();
+      layoutsPalette.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -959,21 +1045,188 @@
     if (guardMinutes !== undefined) { guardMs = guardMinutes * 60000; noteActivity(); }
   });
 
+  // --- Project switcher (Ctrl+Shift+P): type to filter, Enter opens, Ctrl+Enter opens it as a tab ---
+  // Spend per project (ccusage, cached in main): fetched when the switcher opens, shown once it arrives.
+  let spend = {};
+  const loadSpend = () => widget.usage.byProject().then((x) => { spend = x || {}; switcher.refresh(); });
+  const switcher = WidgetSwitcher.createSwitcher({
+    el: $('switcher'),
+    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state), git: [WidgetGitBadge.badge(gitAll[p.id]).long, spend[p.id]].filter(Boolean).join('  ') })),
+    pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
+    canTab: (id) => !!activeId && id !== activeId,
+    onClose: () => terminals.focus()
+  });
+
+  // --- Saved layouts (Ctrl+Shift+O): a project with other projects' sessions as tabs, some in the lower zone ---
+  let layouts = [];
+  try { layouts = WidgetLayouts.normalize(JSON.parse(localStorage.getItem('layouts'))); } catch { /* none saved */ }
+  const saveLayouts = (next) => {
+    layouts = next;
+    try { localStorage.setItem('layouts', JSON.stringify(layouts)); } catch { /* storage off */ }
+  };
+  const projectName = (id) => (projects.find((p) => p.id === id) || {}).name;
+  const projectExists = (id) => projects.some((p) => p.id === id && !p.missing);
+
+  async function applyLayout(l) {
+    const use = WidgetLayouts.usable(l, projectExists);
+    if (!use) return toast('Some of those projects are gone');
+    await activate(use.host);
+    if (activeId !== use.host) return;
+    for (const id of linkedOf(use.host).slice()) if (!use.links.includes(id)) unlinkProject(id);
+    for (const id of use.links) await linkProject(id, { quiet: true });
+    splitRatio = use.ratio;
+    try { localStorage.setItem('splitRatio', String(splitRatio)); } catch { /* storage off */ }
+    for (const id of use.links) {
+      if (!tabIds().includes(id)) continue;
+      const down = currentLayout().zones[1].includes(id);
+      if (use.bottom.includes(id) !== down) moveTab(id, down ? 0 : 1);
+    }
+    renderTabs(true);
+    toast(`Layout: ${use.name}`);
+  }
+
+  function saveCurrentLayout() {
+    const links = activeId ? linkedOf(activeId) : [];
+    if (!links.length) return toast('Open another project in a tab first (right-click it > Open in tab)');
+    ask({
+      title: 'Save layout',
+      text: `${WidgetLayouts.describe({ host: activeId, links, bottom: links.filter((id) => currentLayout().zones[1].includes(id)) }, projectName)}. Saving with an existing name replaces it.`,
+      value: '',
+      ok: 'Save',
+      submit: async (name) => {
+        if (!name.trim()) return 'Give the layout a name';
+        const bottom = links.filter((id) => currentLayout().zones[1].includes(id));
+        saveLayouts(WidgetLayouts.add(layouts, { name, host: activeId, links, bottom, ratio: splitRatio }));
+        return null;
+      }
+    });
+  }
+
+  const layoutsPalette = WidgetSwitcher.createSwitcher({
+    el: $('layouts'),
+    emptyText: 'No saved layouts. Ctrl+N saves the current tabs as one.',
+    items: () => layouts.map((l) => ({ id: l.id, name: l.name, path: WidgetLayouts.describe(l, projectName), plain: true })),
+    pick: (id) => { const l = layouts.find((x) => x.id === id); if (l) applyLayout(l); },
+    onKey: (e, item, api) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') { api.close(); saveCurrentLayout(); return true; }
+      if (e.ctrlKey && e.key === 'Delete' && item) { saveLayouts(WidgetLayouts.remove(layouts, item.id)); api.refresh(); return true; }
+      return false;
+    },
+    onClose: () => terminals.focus()
+  });
+
+  // --- Search every project (Ctrl+Shift+H): file names and contents, results from the main process as you type ---
+  let findRows = [];
+  let findTimer = null;
+  const findAll = WidgetSwitcher.createSwitcher({
+    el: $('findall'),
+    emptyText: 'Type to search (two or more characters)',
+    items: () => findRows.map((r, i) => ({ id: String(i), name: r.project + '  ' + r.rel + (r.line ? ':' + r.line : ''), path: r.text || (r.line ? '' : 'file name'), plain: true })),
+    canTab: () => false,
+    pick: (id) => {
+      const r = findRows[Number(id)];
+      if (!r) return;
+      if (r.line) widget.files.openAt(r.id, r.rel, r.line); else widget.files.open(r.id, r.rel);
+    },
+    onInput: (q) => {
+      clearTimeout(findTimer);
+      findRows = [];
+      if (q.trim().length < 2) return findAll.refresh();
+      findTimer = setTimeout(async () => {
+        const rows = await widget.files.searchAll(q.trim());
+        if (rows && findAll.isOpen()) { findRows = rows; findAll.refresh(); }
+      }, 250);
+    },
+    onClose: () => { clearTimeout(findTimer); terminals.focus(); }
+  });
+
+  // --- Send to another session (Ctrl+Shift+L): the selected text (else the clipboard) goes into that session's prompt ---
+  let sendText = '';
+  const sendTo = WidgetSwitcher.createSwitcher({
+    el: $('sendto'),
+    emptyText: 'No other session is open',
+    items: () => projects
+      .filter((p) => openIds.has(p.id) && p.id !== sendFrom())
+      .map((p) => ({ id: p.id, name: p.name, path: p.path, open: true, active: false, dot: SS.dot(sess(p.id).state) })),
+    canTab: () => true,
+    pick: (id, { inTab }) => {
+      if (!sendText.trim()) return toast('Nothing to send');
+      widget.pty.write(id, `\x1b[200~${sendText}\x1b[201~${inTab ? '\r' : ''}`);
+      toast(`Sent ${sendText.length} characters to ${(projects.find((p) => p.id === id) || {}).name}`);
+      activate(id);
+    },
+    onClose: () => terminals.focus()
+  });
+  const sendFrom = () => { const L = currentLayout(); return L.focused; };
+  async function openSendTo() {
+    const t = terminals.get(sendFrom());
+    sendText = (t && t.term.hasSelection() ? t.term.getSelection() : '') || (await widget.clipboard.read()) || '';
+    if (!sendText.trim()) return toast('Select some text first (or copy it)');
+    sendTo.open();
+  }
+
+  // --- Saved prompts (Ctrl+Shift+K): Enter pastes into the focused session's prompt, Ctrl+Enter pastes and sends ---
+  let savedPrompts = [];
+  widget.prompts.get().then((list) => { savedPrompts = list; });
+  const savePrompts = async (list) => { savedPrompts = await widget.prompts.set(list); };
+  const promptTarget = () => { const L = currentLayout(); return L.focused && !L.focused.startsWith('aux:') && terminals.has(L.focused) ? L.focused : null; }; // Claude sessions only: a shell would run the text
+  const promptsPalette = WidgetSwitcher.createSwitcher({
+    el: $('prompts'),
+    emptyText: 'No saved prompts. Ctrl+N makes one.',
+    items: () => WidgetPrompts.visible(savedPrompts, activeId).map((p) => ({ id: p.id, name: (p.project ? '• ' : '') + p.title, path: p.text.replace(/\s+/g, ' '), plain: true })),
+    canTab: () => true,
+    pick: (id, { inTab }) => {
+      const p = savedPrompts.find((x) => x.id === id);
+      const target = promptTarget();
+      if (!p || !target) return toast('Focus a Claude session first');
+      widget.pty.write(target, `\x1b[200~${p.text}\x1b[201~${inTab ? '\r' : ''}`);
+    },
+    onKey: (e, item, api) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        const scoped = e.shiftKey && activeId;
+        api.close();
+        ask({
+          title: scoped ? 'New prompt for this project' : 'New saved prompt',
+          text: 'The first line becomes its name. Ctrl+Enter saves.',
+          ok: 'Save',
+          area: true,
+          submit: async (text) => {
+            if (!text.trim()) return 'Write the prompt first';
+            await savePrompts(WidgetPrompts.add(savedPrompts, { title: '', text, project: scoped ? activeId : null }));
+            return null;
+          }
+        });
+        return true;
+      }
+      if (e.ctrlKey && e.key === 'Delete' && item) {
+        savePrompts(WidgetPrompts.remove(savedPrompts, item.id)).then(api.refresh);
+        return true;
+      }
+      return false;
+    },
+    onClose: () => terminals.focus()
+  });
+
   // --- Small prompt (worktree branch name, project name) ------------------------
   const modal = $('modal');
-  function ask({ title, text, value = '', ok = 'OK', submit }) {
+  function ask({ title, text, value = '', ok = 'OK', area = false, submit }) {
     $('modal-title').textContent = title;
     $('modal-text').textContent = text || '';
     $('modal-error').textContent = '';
     $('modal-ok').textContent = ok;
-    const input = $('modal-input');
+    const input = $(area ? 'modal-area' : 'modal-input');
+    $('modal-area').hidden = !area;
+    $('modal-input').hidden = area;
     input.value = value;
     modal.hidden = false;
     input.focus();
     input.select();
     const close = () => { modal.hidden = true; terminals.focus(); };
     $('modal-cancel').onclick = close;
-    modal.onkeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    modal.onkeydown = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      else if (area && e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); $('modal-ok').click(); }
+    };
     $('modal-form').onsubmit = async (e) => {
       e.preventDefault();
       $('modal-ok').disabled = true;
@@ -997,6 +1250,17 @@
       if (r && r.error) return r.error;
       toast(`Worktree ready: ${r.dir}`, 3000);
       return null;
+    }
+  }));
+  widget.projects.onDefaultsAsk(({ id, name, text, open }) => ask({
+    title: `Session defaults for ${name}`,
+    text: `Model, permission mode and environment variables this project's Claude session starts with.${open ? ' Restart the session (↻) to apply them.' : ''} Ctrl+Enter saves.`,
+    value: text,
+    ok: 'Save',
+    area: true,
+    submit: async (value) => {
+      const r = await widget.projects.setDefaults(id, value);
+      return r && r.error ? r.error : null;
     }
   }));
   // Starts from the name shown, which is a 0.8.0 display name if one was set, so renaming the folder to it is one click.
@@ -1026,6 +1290,22 @@
     filesPane.refresh();
   });
 
+  // Starts the sessions that were open at the last quit (main.js restoreSessions), one after another, in the background.
+  // Each is a hidden terminal until its project is clicked; Claude continues its last conversation.
+  async function reopenSessions(ids, shownId) {
+    await switching; // the project being shown starts first
+    for (const id of ids) {
+      const p = projects.find((x) => x.id === id);
+      if (!p || p.missing || id === shownId || openIds.has(id) || terminals.has(id)) continue;
+      const t = terminals.create(id);
+      t.el.hidden = true;
+      const ok = await widget.projects.open(id, 120, 30, true);
+      if (!ok) { terminals.destroy(id); continue; }
+      openIds.add(id);
+      renderRail();
+    }
+  }
+
   // --- Launch: open the last active project; every other one stays idle until clicked ---
   const initial = await widget.projects.get();
   projects = initial.list;
@@ -1034,4 +1314,5 @@
   applyAux(await widget.aux.get());
   if (initial.active) activate(initial.active);
   else showPlaceholder('No projects yet. Add a folder with + in the project list.');
+  reopenSessions(initial.restore || [], initial.active);
 })();

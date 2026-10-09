@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, shell, clipboard, screen, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -6,6 +6,7 @@ const pty = require('node-pty');
 const { createSessions } = require('./sessions');
 const projects = require('./projects');
 const gitStatus = require('./git-status');
+const usageStats = require('./usage');
 const { summarize } = require('./footer');
 const files = require('./files');
 const settingsLib = require('./settings');
@@ -64,6 +65,10 @@ const DEFAULT_CONFIG = {
   // Windows 11 22H2+ only: "none" | "acrylic" | "mica" | "tabbed"
   backgroundMaterial: 'none',
   showInTaskbar: false,
+  // A desktop notification when Claude needs you or finishes a turn in a session you are not looking at.
+  notifications: true,
+  // Reopen the projects whose sessions were open when Gremlin last quit (each continues its last conversation).
+  restoreSessions: true,
   // Start Gremlin when you sign in (installed app only); open hidden in the tray, or minimized when it is in the taskbar.
   launchOnStartup: false,
   startMinimized: false,
@@ -94,6 +99,8 @@ const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
 // Pinned extras and hidden projects for the rail, kept apart from the hand-edited config.json.
 const projectsPath = path.join(userDir, 'projects.json');
+const promptsPath = path.join(userDir, 'prompts.json');
+const defaultsPath = path.join(userDir, 'project-defaults.json');
 
 function readJson(file, fallback) {
   try {
@@ -188,6 +195,7 @@ const sessions = createSessions({
   settingsFile: writeSessionSettings,
   claudeDir,
   extraEnv: () => ({ ...claudeEnv(), ...guardEnv(), ...openEnv() }),
+  projectDefaults: (id) => { const d = loadDefaults()[id]; return { flags: projDefaults.flags(d), env: projDefaults.normalize(d).env }; },
   onStatus: (id) => { if (id === activeId) pollGit(); }
 });
 
@@ -234,6 +242,8 @@ const owner = (id) => (aux.has(id) ? aux.get(id).projectId : id);
 // The project rail adds its width to the window, growing it to the left, so the terminal stays put.
 // window-state.json keeps the bounds without the rail.
 const autostart = require('./autostart');
+// Windows files toasts under this ID (the installer's appId), so they say "Gremlin" and not "electron.app".
+if (process.platform === 'win32') app.setAppUserModelId('com.jdonajkowski.gremlin-desk');
 const railLimits = require('./rail-width'); // dragging the rail's right edge sets state.railWidth
 const RAIL_COLLAPSED = 36;
 const MIN_WIDTH = 320;
@@ -502,9 +512,47 @@ function initialActive() {
   return hit ? hit.id : null;
 }
 
+// Remembers which projects have a session, so the next launch can reopen them (restoreSessions).
+function saveOpen() {
+  const ids = sessions.ids();
+  if (JSON.stringify(ids) === JSON.stringify(state.openProjects)) return;
+  state.openProjects = ids;
+  writeJson(statePath, state);
+}
+
+// What each project has cost so far, for the switcher: one ccusage run, kept for ten minutes.
+let spendCache = null;
+let spendAt = 0;
+let spendBusy = null;
+ipcMain.handle('usage:projects', async () => {
+  if (spendCache && Date.now() - spendAt < 600000) return spendCache;
+  if (!spendBusy) {
+    spendBusy = usageStats.load({ dirs: [claudeDir()], ccusage: ccusageCommand(), isWin })
+      .then((u) => {
+        const by = usageStats.byProject(u.sessions, projectList);
+        spendCache = Object.fromEntries(Object.entries(by).map(([id, x]) => [id, usageStats.formatSpend(x)]));
+        spendAt = Date.now();
+        return spendCache;
+      })
+      .catch(() => ({}))
+      .finally(() => { spendBusy = null; });
+  }
+  return spendBusy;
+});
+
+const savedPrompts = require('./prompts');
+ipcMain.handle('prompts:get', () => savedPrompts.normalize(readJson(promptsPath, [])));
+ipcMain.handle('prompts:set', (_e, list) => {
+  const clean = savedPrompts.normalize(list);
+  writeJson(promptsPath, clean);
+  return clean;
+});
+
 ipcMain.handle('projects:get', () => {
   scanProjects();
-  return { list: projectList, open: sessions.ids(), active: initialActive() };
+  const usable = (id) => projectList.some((p) => p.id === id && !p.missing);
+  const restore = config.restoreSessions === false ? [] : (Array.isArray(state.openProjects) ? state.openProjects : []).filter(usable);
+  return { list: projectList, open: sessions.ids(), active: initialActive(), restore };
 });
 
 // Makes a project active, starting its session the first time. Returns false for a missing folder.
@@ -514,6 +562,7 @@ ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
     const p = projectList.find((x) => x.id === id);
     if (!p || p.missing || !fs.existsSync(p.path)) return false;
     sessions.open(id, p.path, cols, rows);
+    saveOpen();
   }
   if (!link && activeId !== id) {
     activeId = id;
@@ -529,6 +578,7 @@ ipcMain.handle('project:open', (_e, { id, cols, rows, link }) => {
 function closeSession(id) {
   aux.closeProject(id);
   if (!sessions.close(id)) return;
+  saveOpen();
   send('session:closed', { id });
   scanProjects();
 }
@@ -596,6 +646,30 @@ ipcMain.on('admin:menu', () => {
 ipcMain.on('workbench:open', (_e, tab) => workbench.open(tab));
 
 // Row context menu: Close session, Rename…, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
+// Right-click menu of a tab: resolves with the chosen action ('rename', 'pin', 'close', 'move') or null.
+ipcMain.handle('tab:menu', (_e, { pinned, closable, split }) => new Promise((resolve) => {
+  if (!win) return resolve(null);
+  const items = [
+    { label: 'Rename…', click: () => resolve('rename') },
+    { label: pinned ? 'Unpin' : 'Pin', click: () => resolve('pin') },
+    { label: split ? 'Move to the other zone' : 'Move to the lower zone', click: () => resolve('move') }
+  ];
+  if (closable) items.push({ type: 'separator' }, { label: 'Close', click: () => resolve('close') });
+  Menu.buildFromTemplate(items).popup({ window: win, callback: () => setTimeout(() => resolve(null), 50) });
+}));
+
+// Per-project session defaults (model, permission mode, env); read again at every session start.
+const projDefaults = require('./project-defaults');
+const loadDefaults = () => readJson(defaultsPath, {});
+ipcMain.handle('project:setDefaults', (_e, { id, text }) => {
+  const r = projDefaults.parseText(text);
+  if (r.error) return { error: r.error };
+  const all = loadDefaults();
+  if (projDefaults.isEmpty(r.defaults)) delete all[id]; else all[id] = r.defaults;
+  writeJson(defaultsPath, all);
+  return { ok: true };
+});
+
 ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;
@@ -605,6 +679,7 @@ ipcMain.on('project:menu', (_e, { id }) => {
   if (sessions.has(id)) items.push({ label: 'Close session', click: () => closeSession(id) });
   if (items.length) items.push({ type: 'separator' });
   items.push({ label: 'Rename…', enabled: !p.missing && !p.orphan, click: () => send('project:renameAsk', { id, name: p.name, path: p.path, open: sessions.has(id) }) });
+  items.push({ label: 'Session defaults…', click: () => send('project:defaultsAsk', { id, name: p.name, text: projDefaults.formatText(loadDefaults()[id]), open: sessions.has(id) }) });
   items.push({ label: 'Open in Explorer', enabled: !p.missing, click: () => shell.openPath(p.path) });
   // Worktree sessions: a second checkout of the repo on its own branch, listed as its own project.
   if (!p.missing && fs.existsSync(path.join(p.path, '.git'))) {
@@ -779,8 +854,27 @@ async function pollGit() {
   if (json !== lastGit) { lastGit = json; send('git:update', { id, info }); }
 }
 
+// Every project's git state for the sidebar and the switcher, one repo after another, only when the window is showing.
+let allGitBusy = false;
+let lastAllGit = {};
+async function pollAllGit() {
+  if (allGitBusy || !win || win.isDestroyed() || !win.isVisible()) return;
+  allGitBusy = true;
+  const next = {};
+  for (const p of projectList) {
+    if (p.missing) continue;
+    const info = await gitStatus.read(p.path);
+    if (info) next[p.id] = info;
+  }
+  allGitBusy = false;
+  if (JSON.stringify(next) !== JSON.stringify(lastAllGit)) { lastAllGit = next; send('git:all', next); }
+}
+
 const statusTimer = setInterval(() => sessions.pollStatus(), 500);
 const gitTimer = setInterval(pollGit, 3000);
+const allGitTimer = setInterval(pollAllGit, 15000);
+setTimeout(pollAllGit, 4000);
+ipcMain.handle('git:all', () => lastAllGit);
 
 // ---------------------------------------------------------------------------
 // Markdown popouts: .md paths clicked in the terminal open rendered in their own window
@@ -1060,6 +1154,20 @@ ipcMain.handle('files:search', async (_e, { id, query, regex, caseSensitive }) =
   const seq = ++searchSeq;
   const r = await searchProject(root, query, { regex, caseSensitive, isCancelled: () => seq !== searchSeq });
   return r && { ...r, root };
+});
+// Ctrl+Shift+H: file contents in every project at once, a few hits from each so a common word does not drown the rest.
+let searchAllSeq = 0;
+ipcMain.handle('files:searchAll', async (_e, { query }) => {
+  const seq = ++searchAllSeq;
+  const rows = [];
+  for (const p of projectList) {
+    if (p.missing || seq !== searchAllSeq) continue;
+    const r = await searchProject(p.path, query, { maxHits: 12, maxFiles: 8000, isCancelled: () => seq !== searchAllSeq });
+    if (!r) return null; // a newer search took over
+    for (const f of r.files.slice(0, 5)) rows.push({ id: p.id, project: p.name, rel: f.rel, line: 0, text: '' });
+    for (const hit of r.hits) for (const m of hit.matches.slice(0, 3)) rows.push({ id: p.id, project: p.name, rel: hit.rel, line: m.line, text: m.text });
+  }
+  return rows.slice(0, 200);
 });
 ipcMain.handle('files:git', async (_e, { id }) => {
   const root = projectPath(id);
@@ -1480,6 +1588,23 @@ ipcMain.on('win:progress', (_e, { state, value }) => {
   if (!mode) return win.setProgressBar(-1);
   win.setProgressBar(state === 3 ? 2 : Math.min(100, Math.max(0, value)) / 100, { mode });
 });
+// Desktop notification from the renderer (it decides when, src/notify-rules.js); clicking one opens that project.
+const shownNotes = new Set(); // kept until closed so they are not garbage collected before the click
+ipcMain.on('notify:show', (_e, { id, title, body } = {}) => {
+  if (config.notifications === false || !Notification.isSupported()) return;
+  const n = new Notification({ title: String(title || 'Gremlin').slice(0, 120), body: String(body || '').slice(0, 300), icon: path.join(__dirname, '..', 'assets', 'icon.png') });
+  shownNotes.add(n);
+  n.on('click', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      if (typeof id === 'string' && id) send('projects:select', { id });
+    }
+  });
+  for (const ev of ['click', 'close', 'failed']) n.on(ev, () => shownNotes.delete(n));
+  n.show();
+});
 ipcMain.on('app:openConfig', () => openSettings());
 ipcMain.handle('clipboard:read', () => clipboard.readText());
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
@@ -1542,6 +1667,7 @@ if (!app.requestSingleInstanceLock()) {
     if (rootWatcher) rootWatcher.close();
     clearInterval(statusTimer);
     clearInterval(gitTimer);
+    clearInterval(allGitTimer);
   });
 
   // The tray keeps the app alive when the window is hidden; closing the

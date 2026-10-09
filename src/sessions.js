@@ -22,7 +22,7 @@ function hasHistory(cwd, claudeDir) {
 // The command is config.claudeCommand, else the last shellArgs element (older configs put `claude.cmd`
 // there), else `claude`. It replaces the last shellArgs element so the shell prefix stays the user's.
 // settingsFile (the widget's hooks and status line, see claude-launch.js) is passed when it is Claude Code.
-function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin, settingsFile }) {
+function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin, settingsFile, extraFlags = '' }) {
   const args = Array.isArray(shellArgs) && shellArgs.length ? shellArgs.slice() : null;
   let command = (typeof claudeCommand === 'string' && claudeCommand.trim()) || (args ? String(args[args.length - 1]) : 'claude');
   if (settingsFile && isClaudeCommand(command)) {
@@ -30,6 +30,7 @@ function buildLaunch({ shell, shellArgs, claudeCommand }, { cont, isWin, setting
     const q = isWin ? `'${settingsFile.replace(/'/g, "''")}'` : `'${settingsFile.replace(/'/g, "'\\''")}'`;
     command += ` --settings ${q}`;
   }
+  if (extraFlags && isClaudeCommand(command)) command += extraFlags; // the project's own model / permission mode
   if (cont) command += ' --continue';
   if (args) {
     args[args.length - 1] = command;
@@ -53,7 +54,7 @@ function sessionDir(userDir, id) {
 
 // claudeDir: Claude Code's config folder for these sessions; extraEnv: variables added to each session (CLAUDE_CONFIG_DIR).
 function createSessions({ pty, config, userDir, home, isWin, send, onStatus = () => {}, settingsFile = () => null,
-  claudeDir = () => path.join(home, '.claude'), extraEnv = () => ({}), baseEnv = process.env, tailIntervalMs = 300 }) {
+  claudeDir = () => path.join(home, '.claude'), extraEnv = () => ({}), projectDefaults = () => ({ flags: '', env: {} }), baseEnv = process.env, tailIntervalMs = 300 }) {
   const sessions = new Map();
 
   function resetFiles(s) {
@@ -64,14 +65,15 @@ function createSessions({ pty, config, userDir, home, isWin, send, onStatus = ()
   }
 
   function spawn(s, cols, rows, cont) {
-    const { file, args } = buildLaunch(config, { cont, isWin, settingsFile: settingsFile() });
+    const mine = projectDefaults(s.id);
+    const { file, args } = buildLaunch(config, { cont, isWin, settingsFile: settingsFile(), extraFlags: mine.flags });
     try {
       s.term = pty.spawn(file, args, {
         name: 'xterm-256color',
         cols: cols || 100,
         rows: rows || 30,
         cwd: s.cwd,
-        env: sessionEnv({ baseEnv, extraEnv: extraEnv(), configEnv: config.env || {}, own: { GREMLIN_WORKERS: s.workersPath, GREMLIN_STATUS: s.statusPath } }),
+        env: sessionEnv({ baseEnv, extraEnv: extraEnv(), configEnv: { ...(config.env || {}), ...mine.env }, own: { GREMLIN_WORKERS: s.workersPath, GREMLIN_STATUS: s.statusPath } }),
         useConpty: isWin ? true : undefined
       });
     } catch (err) {

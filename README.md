@@ -67,6 +67,9 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 - **Git badges** in the files pane: M modified, N new, A added, D deleted, R renamed, U conflict, and a dot on folders with changes
 - **Project search:** the box at the top of the files pane (`Ctrl+Shift+F`) searches file names and contents (plain text, `.*` regex, `Aa` match case), skipping `node_modules`, build output and binaries. Click a hit to open the editor at that line
 - **Worktree sessions:** right-click a git project → **New worktree session…** makes a second checkout on its own branch in `~/Projects/<project>--<branch>`, which shows up in the list (⑂) with its own Claude session, so two sessions can work on the same repo without colliding. **Remove this worktree…** deletes the folder and keeps the branch
+- **Working across projects:** the sidebar and the project switcher show each project's git branch, a ● when it has changes and ↑/↓ for commits ahead/behind (refreshed every 15 s); the switcher also shows what each project has cost (from ccusage, tokens only without it). `Ctrl+Shift+J` jumps to the session that needs you, `Ctrl+Shift+K` pastes a saved prompt (stored in `prompts.json`), `Ctrl+Shift+L` sends selected text to another session, `Ctrl+Shift+H` searches every project, and `Ctrl+Shift+O` brings back a saved layout (a project with other projects' sessions as tabs, some in the lower zone). `Ctrl+Alt+F` searches a terminal's output.
+- **Tabs:** double-click a tab to rename it, right-click for Rename, Pin, Move to the other zone and Close, drag a tab onto another to reorder. Pinned tabs come first and have no × until unpinned. The Claude session stays first
+- **Session defaults:** right-click a project > **Session defaults…** sets the model, permission mode (`default`, `acceptEdits`, `plan`, `auto`) and environment variables its Claude session starts with, one `model:`, `permission:` or `env: NAME=value` per line. Read at every session start, so ↻ applies a change (`project-defaults.json`)
 - **New project** (Workbench): starter projects written straight to disk (empty, Node.js tool, Vite web app, Electron app, Python package, C# console app, C# web API), each with `AGENTS.md` + a `CLAUDE.md` that imports it, `.gitignore`, optionally a git repo with a first commit, dependencies installed in a terminal tab, and a private GitHub repo (`gh`). The C# ones are a solution with an xUnit test project, targeting the newest installed .NET SDK. **SPFx**, **TanStack Start** and **Next.js** come from the framework's own generator (Yeoman generator, TanStack CLI, create-next-app) so they start on the latest release, which the form looks up on npm and shows. For SPFx it also shows which Node.js versions that release supports and whether yours is one (the generator runs on a supported Node through npx, and the project gets an `.nvmrc`); you pick a web part (React, no framework, minimal), an extension or a library
 - **Usage** (Workbench): cost and tokens per day (last 30 days) and per session with its project, from [ccusage](https://github.com/ryoppippi/ccusage) (run through `npx` if it isn't installed). Without Node.js it counts tokens from Claude's transcripts, without cost
 
@@ -92,6 +95,13 @@ Tools that read Claude's folder directly need to be pointed at it, e.g. `CLAUDE_
 | Open the Nth project in the list | `Ctrl+1` … `Ctrl+9` |
 | Next / previous open session | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Collapse / expand the project list | `Ctrl+Shift+B`, or the title-bar ☰ button |
+| Go to a project (type to filter; `Enter` opens it, `Ctrl+Enter` opens it as a tab) | `Ctrl+Shift+P` |
+| Jump to the next session that needs you (waiting for an answer, then finished) | `Ctrl+Shift+J` |
+| Search the terminal output (`Enter` / `Shift+Enter` next / previous, `Esc` closes) | `Ctrl+Alt+F` |
+| Saved prompts (`Enter` pastes into the prompt, `Ctrl+Enter` pastes and sends, `Ctrl+N` new, `Ctrl+Shift+N` new for this project, `Ctrl+Delete` remove) | `Ctrl+Shift+K` |
+| Send the selected text (else the clipboard) to another session's prompt | `Ctrl+Shift+L` |
+| Search file names and contents in every project (`Enter` opens the file at that line) | `Ctrl+Shift+H` |
+| Saved layouts: apply one, `Ctrl+N` saves the current tabs and zones as one | `Ctrl+Shift+O` |
 | Show / hide the files pane | `Ctrl+Shift+E`, or the title-bar folder button |
 | Search the project | `Ctrl+Shift+F` (`Esc` clears) |
 | Open the Workbench | `Ctrl+Shift+G`, or the title-bar grid button |
@@ -133,6 +143,8 @@ The gear button (or the tray menu) opens the settings window. It edits `~/Projec
 | `opacity` | `0.95` | 0.3–1 |
 | `backgroundMaterial` | `"none"` | `"acrylic"`, `"mica"` or `"tabbed"` (Windows 11 22H2+) |
 | `showInTaskbar` | `false` | Needs to be `true` for taskbar progress |
+| `notifications` | `true` | Desktop notification when Claude needs you (permission prompt or question) or finishes a turn in a session you are not looking at: Gremlin in the background, or that session not on screen. Click it to open the project |
+| `restoreSessions` | `true` | At launch, also reopen the projects whose sessions were open when you quit; each continues its last conversation |
 | `launchOnStartup` | `false` | Start Gremlin at sign-in (installed app; on Linux an autostart entry) |
 | `startMinimized` | `false` | Open hidden in the tray, or minimized when `showInTaskbar` is on |
 | `hotkey` | `Control+Alt+Space` | Electron accelerator syntax |
