@@ -938,6 +938,9 @@
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'k') {
       handled();
       promptsPalette.toggle();
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+      handled();
+      if (sendTo.isOpen()) sendTo.close(); else openSendTo();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -999,6 +1002,31 @@
     canTab: (id) => !!activeId && id !== activeId,
     onClose: () => terminals.focus()
   });
+
+  // --- Send to another session (Ctrl+Shift+L): the selected text (else the clipboard) goes into that session's prompt ---
+  let sendText = '';
+  const sendTo = WidgetSwitcher.createSwitcher({
+    el: $('sendto'),
+    emptyText: 'No other session is open',
+    items: () => projects
+      .filter((p) => openIds.has(p.id) && p.id !== sendFrom())
+      .map((p) => ({ id: p.id, name: p.name, path: p.path, open: true, active: false, dot: SS.dot(sess(p.id).state) })),
+    canTab: () => true,
+    pick: (id, { inTab }) => {
+      if (!sendText.trim()) return toast('Nothing to send');
+      widget.pty.write(id, `\x1b[200~${sendText}\x1b[201~${inTab ? '\r' : ''}`);
+      toast(`Sent ${sendText.length} characters to ${(projects.find((p) => p.id === id) || {}).name}`);
+      activate(id);
+    },
+    onClose: () => terminals.focus()
+  });
+  const sendFrom = () => { const L = currentLayout(); return L.focused; };
+  async function openSendTo() {
+    const t = terminals.get(sendFrom());
+    sendText = (t && t.term.hasSelection() ? t.term.getSelection() : '') || (await widget.clipboard.read()) || '';
+    if (!sendText.trim()) return toast('Select some text first (or copy it)');
+    sendTo.open();
+  }
 
   // --- Saved prompts (Ctrl+Shift+K): Enter pastes into the focused session's prompt, Ctrl+Enter pastes and sends ---
   let savedPrompts = [];
