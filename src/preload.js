@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld('widget', {
   usage: {
     byProject: () => ipcRenderer.invoke('usage:projects')
   },
+  tabs: {
+    menu: (opts) => ipcRenderer.invoke('tab:menu', opts)
+  },
   prompts: {
     get: () => ipcRenderer.invoke('prompts:get'),
     set: (list) => ipcRenderer.invoke('prompts:set', list)

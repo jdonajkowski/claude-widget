@@ -644,6 +644,18 @@ ipcMain.on('admin:menu', () => {
 ipcMain.on('workbench:open', (_e, tab) => workbench.open(tab));
 
 // Row context menu: Close session, Rename…, Open in Explorer, then Hide (scanned) or Unpin (pinned extras).
+// Right-click menu of a tab: resolves with the chosen action ('rename', 'pin', 'close', 'move') or null.
+ipcMain.handle('tab:menu', (_e, { pinned, closable, split }) => new Promise((resolve) => {
+  if (!win) return resolve(null);
+  const items = [
+    { label: 'Rename…', click: () => resolve('rename') },
+    { label: pinned ? 'Unpin' : 'Pin', click: () => resolve('pin') },
+    { label: split ? 'Move to the other zone' : 'Move to the lower zone', click: () => resolve('move') }
+  ];
+  if (closable) items.push({ type: 'separator' }, { label: 'Close', click: () => resolve('close') });
+  Menu.buildFromTemplate(items).popup({ window: win, callback: () => setTimeout(() => resolve(null), 50) });
+}));
+
 ipcMain.on('project:menu', (_e, { id }) => {
   const p = projectList.find((x) => x.id === id);
   if (!p || !win) return;

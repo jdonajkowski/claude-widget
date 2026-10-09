@@ -757,3 +757,4 @@ body.rail-collapsed .proj .pgit { display: none; }
 #modal-area:focus { border-color: var(--accent); }
 #modal-area[hidden], #modal-input[hidden] { display: none; }
 .sw-path.plain { direction: ltr; text-align: left; }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }

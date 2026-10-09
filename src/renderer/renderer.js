@@ -348,7 +348,15 @@
     }
     try { localStorage.setItem('tabLinks', TL.stringify(tabLinks, bottom)); } catch { /* storage off */ }
   }
-  const tabIds = () => (activeId ? [activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)) : []);
+  // Your own tab order, pins and names (Right-click a tab; drag a tab onto another to reorder).
+  const TP = WidgetTabPrefs;
+  let tabPrefs = (() => { try { return TP.parse(localStorage.getItem('tabPrefs')); } catch { return TP.empty(); } })();
+  function saveTabPrefs(next) {
+    tabPrefs = TP.prune(next, [...auxList.map((a) => a.id), ...projects.map((p) => p.id)]);
+    try { localStorage.setItem('tabPrefs', JSON.stringify(tabPrefs)); } catch { /* storage off */ }
+    renderTabs();
+  }
+  const tabIds = () => (activeId ? TP.arrange([activeId, ...auxList.filter((a) => a.projectId === activeId).map((a) => a.id), ...linkedOf(activeId)].filter((id) => terminals.has(id)), tabPrefs) : []);
   const currentLayout = () => Z.layout(zst(), tabIds());
   const shownView = () => currentLayout().focused || activeId;
   let splitRatio = 0.6;
@@ -446,7 +454,7 @@
     el.draggable = true;
     const label = document.createElement('span');
     label.className = 'tlabel';
-    label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + t.title;
+    label.textContent = (t.kind.startsWith('admin') ? '⛨ ' : '') + (TP.isPinned(tabPrefs, t.id) ? '▪ ' : '') + TP.nameOf(tabPrefs, t.id, t.title);
     // A project's Claude session (the first tab, or one opened in a tab) shows its state like the sidebar does.
     if (t.kind === 'claude') {
       const dot = document.createElement('span');
@@ -456,7 +464,8 @@
     el.appendChild(label);
     // A linked project tab only leaves this view: its session keeps running.
     const close = () => (t.linked ? unlinkProject(t.id) : widget.aux.close(t.id));
-    if (t.kind !== 'claude' || t.linked) {
+    const closable = (t.kind !== 'claude' || t.linked) && !TP.isPinned(tabPrefs, t.id); // a pinned tab has to be unpinned first
+    if (closable) {
       const x = document.createElement('button');
       x.className = 'tclose';
       x.textContent = '×';
@@ -465,7 +474,45 @@
       el.appendChild(x);
     }
     el.onclick = () => showView(t.id);
-    el.onauxclick = (e) => { if (e.button === 1 && (t.kind !== 'claude' || t.linked)) close(); };
+    el.onauxclick = (e) => { if (e.button === 1 && closable) close(); };
+    const rename = () => ask({
+      title: 'Rename tab',
+      text: 'Only changes the name shown on the tab. Leave it empty to go back to the original.',
+      value: TP.nameOf(tabPrefs, t.id, ''),
+      ok: 'Rename',
+      submit: async (name) => { saveTabPrefs(TP.rename(tabPrefs, t.id, name)); return null; }
+    });
+    el.ondblclick = rename;
+    el.oncontextmenu = async (e) => {
+      e.preventDefault();
+      const L = currentLayout();
+      const action = await widget.tabs.menu({ pinned: TP.isPinned(tabPrefs, t.id), closable: t.kind !== 'claude' || t.linked, split: L.split });
+      if (action === 'rename') rename();
+      else if (action === 'pin') saveTabPrefs(TP.togglePin(tabPrefs, t.id));
+      else if (action === 'close') close();
+      else if (action === 'move' && t.id !== tabIds()[0]) moveTab(t.id, L.split ? 1 - (L.zones[1].includes(t.id) ? 1 : 0) : 1);
+    };
+    // Dropping another tab on this one puts it just before this one (moving it into this zone first if needed).
+    el.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('application/x-widget-tab')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.add('drop-before');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-before'));
+    el.addEventListener('drop', (e) => {
+      const id = e.dataTransfer.getData('application/x-widget-tab');
+      el.classList.remove('drop-before');
+      document.body.classList.remove('dragging-tab');
+      dropEl.hidden = true;
+      if (!id || id === t.id || t.id === tabIds()[0]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const L = currentLayout();
+      const zoneOfTarget = L.zones[1].includes(t.id) ? 1 : 0;
+      if (L.split && !L.zones[zoneOfTarget].includes(id)) moveTab(id, zoneOfTarget);
+      saveTabPrefs(TP.move(tabPrefs, tabIds(), id, t.id));
+    });
     el.ondragstart = (e) => {
       e.dataTransfer.setData('application/x-widget-tab', t.id);
       e.dataTransfer.effectAllowed = 'move';
