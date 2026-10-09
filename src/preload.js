@@ -79,6 +79,10 @@ contextBridge.exposeInMainWorld('widget', {
     read: () => ipcRenderer.invoke('clipboard:read'),
     write: (text) => ipcRenderer.send('clipboard:write', text)
   },
+  prompts: {
+    get: () => ipcRenderer.invoke('prompts:get'),
+    set: (list) => ipcRenderer.invoke('prompts:set', list)
+  },
   workers: {
     onEvents: on('workers:events')
   },

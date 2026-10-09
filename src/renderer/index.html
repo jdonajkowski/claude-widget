@@ -130,15 +130,23 @@
         <div id="modal-title"></div>
         <div id="modal-text"></div>
         <input id="modal-input" spellcheck="false" autocomplete="off">
+        <textarea id="modal-area" rows="7" spellcheck="false" hidden></textarea>
         <div id="modal-error"></div>
         <div class="modal-buttons"><button type="button" id="modal-cancel">Cancel</button><button type="submit" id="modal-ok">OK</button></div>
       </form>
     </div>
-    <div id="switcher" hidden>
-      <div id="sw-box">
-        <input id="sw-input" placeholder="Go to project…" spellcheck="false" autocomplete="off">
-        <div id="sw-list"></div>
-        <div id="sw-hint">Enter: open · Ctrl+Enter: open as a tab · Esc: close</div>
+    <div id="prompts" class="picker" hidden>
+      <div class="sw-box">
+        <input class="sw-input" placeholder="Saved prompts…" spellcheck="false" autocomplete="off">
+        <div class="sw-list"></div>
+        <div class="sw-hint">Enter: paste · Ctrl+Enter: paste and send · Ctrl+N: new · Ctrl+Shift+N: new for this project · Ctrl+Delete: remove</div>
+      </div>
+    </div>
+    <div id="switcher" class="picker" hidden>
+      <div class="sw-box">
+        <input class="sw-input" placeholder="Go to project…" spellcheck="false" autocomplete="off">
+        <div class="sw-list"></div>
+        <div class="sw-hint">Enter: open · Ctrl+Enter: open as a tab · Esc: close</div>
       </div>
     </div>
   </div>
@@ -159,6 +167,7 @@
   <script src="../notify-rules.js"></script>
   <script src="../attention.js"></script>
   <script src="../git-badge.js"></script>
+  <script src="../prompts.js"></script>
   <script src="terminals.js"></script>
   <script src="rail.js"></script>
   <script src="switcher.js"></script>

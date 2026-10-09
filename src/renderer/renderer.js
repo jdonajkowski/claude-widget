@@ -934,6 +934,9 @@
       handled();
       const id = WidgetAttention.next(projects.filter((p) => openIds.has(p.id)), (x) => SS.dot(sess(x).state), activeId);
       if (id) activate(id); else toast('Nothing is waiting for you');
+    } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'k') {
+      handled();
+      promptsPalette.toggle();
     } else if (e.ctrlKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'e') {
       handled();
       filesPane.toggle();
@@ -987,27 +990,74 @@
   // --- Project switcher (Ctrl+Shift+P): type to filter, Enter opens, Ctrl+Enter opens it as a tab ---
   const switcher = WidgetSwitcher.createSwitcher({
     el: $('switcher'),
-    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state) })),
+    items: () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path, open: openIds.has(p.id), active: p.id === activeId, dot: SS.dot(sess(p.id).state), git: WidgetGitBadge.badge(gitAll[p.id]).long })),
     pick: (id, { inTab }) => (inTab ? linkProject(id) : activate(id)),
     canTab: (id) => !!activeId && id !== activeId,
     onClose: () => terminals.focus()
   });
 
+  // --- Saved prompts (Ctrl+Shift+K): Enter pastes into the focused session's prompt, Ctrl+Enter pastes and sends ---
+  let savedPrompts = [];
+  widget.prompts.get().then((list) => { savedPrompts = list; });
+  const savePrompts = async (list) => { savedPrompts = await widget.prompts.set(list); };
+  const promptTarget = () => { const L = currentLayout(); return L.focused && terminals.has(L.focused) ? L.focused : null; };
+  const promptsPalette = WidgetSwitcher.createSwitcher({
+    el: $('prompts'),
+    emptyText: 'No saved prompts. Ctrl+N makes one.',
+    items: () => WidgetPrompts.visible(savedPrompts, activeId).map((p) => ({ id: p.id, name: (p.project ? '• ' : '') + p.title, path: p.text.replace(/\s+/g, ' '), plain: true })),
+    canTab: () => true,
+    pick: (id, { inTab }) => {
+      const p = savedPrompts.find((x) => x.id === id);
+      const target = promptTarget();
+      if (!p || !target) return toast('Open a session first');
+      widget.pty.write(target, `\x1b[200~${p.text}\x1b[201~${inTab ? '\r' : ''}`);
+    },
+    onKey: (e, item, api) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        const scoped = e.shiftKey && activeId;
+        api.close();
+        ask({
+          title: scoped ? 'New prompt for this project' : 'New saved prompt',
+          text: 'The first line becomes its name. Ctrl+Enter saves.',
+          ok: 'Save',
+          area: true,
+          submit: async (text) => {
+            if (!text.trim()) return 'Write the prompt first';
+            await savePrompts(WidgetPrompts.add(savedPrompts, { title: '', text, project: scoped ? activeId : null }));
+            return null;
+          }
+        });
+        return true;
+      }
+      if (e.ctrlKey && e.key === 'Delete' && item) {
+        savePrompts(WidgetPrompts.remove(savedPrompts, item.id)).then(api.refresh);
+        return true;
+      }
+      return false;
+    },
+    onClose: () => terminals.focus()
+  });
+
   // --- Small prompt (worktree branch name, project name) ------------------------
   const modal = $('modal');
-  function ask({ title, text, value = '', ok = 'OK', submit }) {
+  function ask({ title, text, value = '', ok = 'OK', area = false, submit }) {
     $('modal-title').textContent = title;
     $('modal-text').textContent = text || '';
     $('modal-error').textContent = '';
     $('modal-ok').textContent = ok;
-    const input = $('modal-input');
+    const input = $(area ? 'modal-area' : 'modal-input');
+    $('modal-area').hidden = !area;
+    $('modal-input').hidden = area;
     input.value = value;
     modal.hidden = false;
     input.focus();
     input.select();
     const close = () => { modal.hidden = true; terminals.focus(); };
     $('modal-cancel').onclick = close;
-    modal.onkeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    modal.onkeydown = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      else if (area && e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); $('modal-ok').click(); }
+    };
     $('modal-form').onsubmit = async (e) => {
       e.preventDefault();
       $('modal-ok').disabled = true;

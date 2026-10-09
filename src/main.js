@@ -98,6 +98,7 @@ const configPath = path.join(userDir, 'config.json');
 const statePath = path.join(userDir, 'window-state.json');
 // Pinned extras and hidden projects for the rail, kept apart from the hand-edited config.json.
 const projectsPath = path.join(userDir, 'projects.json');
+const promptsPath = path.join(userDir, 'prompts.json');
 
 function readJson(file, fallback) {
   try {
@@ -515,6 +516,14 @@ function saveOpen() {
   state.openProjects = ids;
   writeJson(statePath, state);
 }
+
+const savedPrompts = require('./prompts');
+ipcMain.handle('prompts:get', () => savedPrompts.normalize(readJson(promptsPath, [])));
+ipcMain.handle('prompts:set', (_e, list) => {
+  const clean = savedPrompts.normalize(list);
+  writeJson(promptsPath, clean);
+  return clean;
+});
 
 ipcMain.handle('projects:get', () => {
   scanProjects();

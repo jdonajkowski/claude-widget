@@ -1,12 +1,13 @@
 // Project switcher (Ctrl+Shift+P): type to filter the projects, Enter to open one, Ctrl+Enter to open it as a tab.
+// Also the base of the prompt palette: items without a `dot` get no state dot, `plain` items show their text left-aligned.
 // Loaded as a plain script (window.WidgetSwitcher).
 (function (root) {
   const MAX_ROWS = 50;
 
   // items(): [{id, name, path, open, active, dot}]; pick(id, {inTab}); canTab(id): may it open as a tab?
-  function createSwitcher({ el, items, pick, canTab, onClose }) {
-    const input = el.querySelector('#sw-input');
-    const listEl = el.querySelector('#sw-list');
+  function createSwitcher({ el, items, pick, canTab = () => false, onClose, onKey = () => false, emptyText = 'No project matches' }) {
+    const input = el.querySelector('.sw-input');
+    const listEl = el.querySelector('.sw-list');
     let shown = [];
     let sel = 0;
 
@@ -28,9 +29,10 @@
         name.className = 'sw-name';
         name.textContent = p.name;
         const path = document.createElement('span');
-        path.className = 'sw-path';
-        path.textContent = [p.git, p.active ? 'current project' : p.path].filter(Boolean).join('   ');
-        row.append(dot, name, path);
+        path.className = p.plain ? 'sw-path plain' : 'sw-path';
+        path.textContent = p.plain ? p.path : [p.git, p.active ? 'current project' : p.path].filter(Boolean).join('   ');
+        if (p.dot !== undefined) row.append(dot);
+        row.append(name, path);
         row.onmousedown = (e) => { e.preventDefault(); choose(i, e.ctrlKey || e.shiftKey); };
         row.onmousemove = () => { if (sel !== i) { sel = i; mark(); } };
         return row;
@@ -38,7 +40,7 @@
       if (!shown.length) {
         const none = document.createElement('div');
         none.className = 'sw-none';
-        none.textContent = 'No project matches';
+        none.textContent = emptyText;
         listEl.appendChild(none);
       }
     }
@@ -72,7 +74,8 @@
 
     input.addEventListener('input', () => { sel = 0; render(); });
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      if (onKey(e, shown[sel], { refresh: () => render(), close })) { e.preventDefault(); e.stopPropagation(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
       else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         if (shown.length) sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length;
