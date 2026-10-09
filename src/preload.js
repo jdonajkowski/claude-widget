@@ -84,7 +84,9 @@ contextBridge.exposeInMainWorld('widget', {
   },
   status: {
     onUpdate: on('status:update'),
-    onGit: on('git:update')
+    onGit: on('git:update'),
+    onGitAll: on('git:all'),
+    gitAll: () => ipcRenderer.invoke('git:all')
   },
   md: {
     resolve: (candidates, id) => ipcRenderer.invoke('md:resolve', { candidates, id }),

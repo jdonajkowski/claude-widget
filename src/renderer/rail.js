@@ -11,13 +11,13 @@
     function makeRow(p) {
       const row = document.createElement('div');
       row.className = 'proj';
-      row.innerHTML = '<span class="pdot"></span><span class="pname"></span><span class="pinit"></span>';
+      row.innerHTML = '<span class="pdot"></span><span class="pname"></span><span class="pgit"></span><span class="pinit"></span>';
       row.addEventListener('click', () => onOpen(row.dataset.id));
       row.addEventListener('contextmenu', (e) => { e.preventDefault(); onMenu(row.dataset.id); });
       return row;
     }
 
-    // list: [{id, path, name, initials, pinned, missing}], view: {active, open:Set, dot:(id)=>string}
+    // list: [{id, path, name, initials, pinned, missing}], view: {active, open:Set, dot:(id)=>string, git:(id)=>{short,long,dirty}}
     function render(list, view) {
       const keep = new Set(list.map((p) => p.id));
       for (const [id, row] of rows) if (!keep.has(id)) { row.remove(); rows.delete(id); }
@@ -30,7 +30,11 @@
         row.querySelector('.pdot').className = `pdot ${dot}`;
         row.querySelector('.pname').textContent = (p.pinned ? '📌 ' : '') + (p.worktreeOf ? '⑂ ' : '') + p.name + (p.missing ? ' (missing)' : '');
         row.querySelector('.pinit').textContent = p.initials;
-        row.title = `${p.name}\n${p.path}${p.worktreeOf ? `\nWorktree of ${p.worktreeOf}` : ''}${view.open.has(p.id) ? ` — ${DOT_TITLES[dot]}` : ''}${i < 9 ? `  (Ctrl+${i + 1})` : ''}`;
+        const git = view.git ? view.git(p.id) : { short: '', long: '', dirty: false };
+        const gitEl = row.querySelector('.pgit');
+        gitEl.textContent = git.short;
+        gitEl.classList.toggle('dirty', git.dirty);
+        row.title = `${p.name}\n${p.path}${git.long ? `\nGit: ${git.long}` : ''}${p.worktreeOf ? `\nWorktree of ${p.worktreeOf}` : ''}${view.open.has(p.id) ? ` — ${DOT_TITLES[dot]}` : ''}${i < 9 ? `  (Ctrl+${i + 1})` : ''}`;
         row.classList.toggle('active', p.id === view.active);
         row.classList.toggle('missing', !!p.missing);
         row.classList.toggle('running', view.open.has(p.id));

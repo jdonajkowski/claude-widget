@@ -29,7 +29,7 @@
         name.textContent = p.name;
         const path = document.createElement('span');
         path.className = 'sw-path';
-        path.textContent = p.active ? 'current project' : p.path;
+        path.textContent = [p.git, p.active ? 'current project' : p.path].filter(Boolean).join('   ');
         row.append(dot, name, path);
         row.onmousedown = (e) => { e.preventDefault(); choose(i, e.ctrlKey || e.shiftKey); };
         row.onmousemove = () => { if (sel !== i) { sel = i; mark(); } };

@@ -253,8 +253,12 @@
   $('btn-admin').onclick = () => widget.menus.admin();
   $('btn-workbench').onclick = () => widget.workbench.open();
 
+  let gitAll = {}; // every project's git state, from main (polled)
+  widget.status.onGitAll((all) => { gitAll = all || {}; renderRail(); });
+  widget.status.gitAll().then((all) => { gitAll = all || {}; renderRail(); });
+
   function renderRail() {
-    rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state) });
+    rail.render(projects, { active: activeId, open: openIds, dot: (id) => SS.dot(sess(id).state), git: (id) => WidgetGitBadge.badge(gitAll[id]) });
   }
 
   widget.projects.onList(({ list, open }) => {

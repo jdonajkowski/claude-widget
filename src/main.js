@@ -797,8 +797,27 @@ async function pollGit() {
   if (json !== lastGit) { lastGit = json; send('git:update', { id, info }); }
 }
 
+// Every project's git state for the sidebar and the switcher, one repo after another, only when the window is showing.
+let allGitBusy = false;
+let lastAllGit = {};
+async function pollAllGit() {
+  if (allGitBusy || !win || win.isDestroyed() || !win.isVisible()) return;
+  allGitBusy = true;
+  const next = {};
+  for (const p of projectList) {
+    if (p.missing) continue;
+    const info = await gitStatus.read(p.path);
+    if (info) next[p.id] = info;
+  }
+  allGitBusy = false;
+  if (JSON.stringify(next) !== JSON.stringify(lastAllGit)) { lastAllGit = next; send('git:all', next); }
+}
+
 const statusTimer = setInterval(() => sessions.pollStatus(), 500);
 const gitTimer = setInterval(pollGit, 3000);
+const allGitTimer = setInterval(pollAllGit, 15000);
+setTimeout(pollAllGit, 4000);
+ipcMain.handle('git:all', () => lastAllGit);
 
 // ---------------------------------------------------------------------------
 // Markdown popouts: .md paths clicked in the terminal open rendered in their own window
@@ -1577,6 +1596,7 @@ if (!app.requestSingleInstanceLock()) {
     if (rootWatcher) rootWatcher.close();
     clearInterval(statusTimer);
     clearInterval(gitTimer);
+    clearInterval(allGitTimer);
   });
 
   // The tray keeps the app alive when the window is hidden; closing the

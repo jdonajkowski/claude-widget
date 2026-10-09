@@ -750,3 +750,6 @@ body.rail-resizing { user-select: none; cursor: col-resize; }
 .term-search .ts-count { font-size: 11px; opacity: .7; min-width: 34px; text-align: right; }
 .term-search button { background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0 4px; font-size: 13px; opacity: .8; }
 .term-search button:hover { opacity: 1; }
+.proj .pgit { margin-left: auto; padding-left: 6px; font-size: 10px; opacity: 0.7; flex: none; }
+.proj .pgit.dirty { color: #d6a642; opacity: 1; }
+body.rail-collapsed .proj .pgit { display: none; }
